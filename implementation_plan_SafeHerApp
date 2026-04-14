@@ -1,0 +1,141 @@
+# SafeHer Mobile App — Implementation Plan
+
+## Overview
+A full-featured women's safety React Native (Expo) app for iOS + Android.  
+All emergency features work **offline-first**. Community features require internet.  
+Preference: **free/open-source APIs only** wherever possible.
+
+---
+
+## Free API Strategy
+
+| Need | Free Solution |
+|------|--------------|
+| SMS alerts | `expo-sms` (native, no cost) + Android Telephony for auto-call |
+| Email alerts | EmailJS (free tier 200/month) or SMTP via NodeMailer (self-hosted) |
+| Push notifications | Firebase FCM (free) |
+| Maps | OpenStreetMap + react-native-maps (free) |
+| Directions / Route | OSRM open-source routing (free) OR Google Maps ($200 credit/mo free) |
+| Geocoding | Nominatim (OSM, free) |
+| Auth | Firebase Auth (free tier) |
+| Database | Supabase (free tier: 500MB DB, 1GB storage) |
+| Real-time | Supabase Realtime (free) |
+| Voice keyword | Vosk offline ASR (open-source, free) |
+| Emergency call | `expo-phone` / native `Linking.openURL('tel:112')` |
+| Crash reporting | Sentry (free tier) |
+
+---
+
+## Proposed Changes
+
+### Root Project — `c:\Users\shash\SafeHerApp\`
+
+#### [NEW] Expo React Native project (initialized via `npx create-expo-app`)
+
+**Project structure:**
+```
+SafeHerApp/
+├── app/                        # Expo Router screens
+│   ├── (tabs)/
+│   │   ├── index.tsx           # SOS Home
+│   │   ├── map.tsx             # Safe Routes + Heatmap
+│   │   ├── checkin.tsx         # Safety Check-ins
+│   │   ├── community.tsx       # Community forum
+│   │   └── profile.tsx         # Profile
+│   ├── onboarding/
+│   │   ├── welcome.tsx
+│   │   ├── permissions.tsx
+│   │   └── contacts.tsx
+│   ├── guardians.tsx           # Emergency contacts CRUD
+│   ├── live-tracking.tsx       # Share GPS link
+│   ├── companion.tsx           # Find travel companion
+│   ├── report-zone.tsx         # Report unsafe area
+│   ├── sos-countdown.tsx       # 10s countdown screen
+│   ├── fake-call.tsx           # Fake call overlay
+│   ├── safety-hub.tsx          # Tips, rights, helplines
+│   ├── settings.tsx
+│   ├── alert-history.tsx
+│   └── _layout.tsx
+├── components/
+│   ├── SOSButton.tsx           # Giant panic button
+│   ├── CountdownTimer.tsx
+│   ├── GuardianCard.tsx
+│   ├── ZonePin.tsx
+│   ├── FakeCallOverlay.tsx
+│   ├── SafetyTipCard.tsx
+│   └── TrackingMap.tsx
+├── hooks/
+│   ├── useShakeDetection.ts    # Accelerometer SOS trigger
+│   ├── useFallDetection.ts     # Gyro + accel fusion
+│   ├── useVoiceKeyword.ts      # Vosk offline detection
+│   ├── useSOSDispatch.ts       # Orchestrate all alert sending
+│   ├── useLocation.ts          # GPS + background location
+│   └── useFakeCall.ts
+├── services/
+│   ├── alertService.ts         # SMS + email + FCM dispatch
+│   ├── locationService.ts      # Supabase live location
+│   ├── authService.ts          # Firebase Auth
+│   ├── emergencyCall.ts        # Auto-dial 112 / contacts
+│   └── videoRecorder.ts        # Silent evidence recording
+├── store/
+│   ├── sosStore.ts             # Zustand SOS state
+│   ├── guardianStore.ts        # Contacts state
+│   └── settingsStore.ts
+├── constants/
+│   ├── helplines.ts            # 112, 1091, 181 etc.
+│   └── theme.ts                # Color palette
+├── backend/                    # Node.js Express API
+│   ├── src/
+│   │   ├── routes/
+│   │   │   ├── auth.ts
+│   │   │   ├── sos.ts
+│   │   │   ├── location.ts
+│   │   │   ├── companion.ts
+│   │   │   └── zones.ts
+│   │   ├── services/
+│   │   │   ├── emailService.ts
+│   │   │   ├── smsService.ts
+│   │   │   └── fcmService.ts
+│   │   └── index.ts
+│   └── package.json
+└── supabase/
+    └── schema.sql              # DB schema
+```
+
+---
+
+## Screen-by-Screen Plan
+
+| # | Screen | Key Tech |
+|---|--------|---------|
+| 01 | SOS Home | Giant button, shake status, guardian count |
+| 02 | Onboarding | Firebase Auth OTP, permission flow |
+| 03 | Guardians | Supabase CRUD, contact picker |
+| 04 | Live Tracking | Supabase Realtime, shareable URL |
+| 05 | Safe Routes | react-native-maps + OSM/OSRM |
+| 06 | Check-in | expo-notifications, background task |
+| 07 | Find Companion | Supabase geo queries, chat |
+| 08 | Report Zone | Map pin drop, Supabase insert |
+| 09 | SOS Countdown | 10s animated timer, video trigger |
+| 10 | Fake Call | Full-screen overlay, haptics |
+| 11 | Safety Hub | Static + fetched content |
+| 12 | Settings | MMKV, sensitivity sliders |
+| 13 | Alert History | Supabase query, video links |
+| 14 | Profile | Medical info, blood type |
+| 15 | Community | Forum via Supabase |
+
+---
+
+## Emergency Call Feature (One-Click)
+- `Linking.openURL('tel:112')` for immediate dial
+- Auto-call via `expo-phone` package
+- SOS dispatch also calls first guardian via native telephony
+
+---
+
+## Verification Plan
+1. Run `npx expo start` and test on Expo Go
+2. Test SOS flow end-to-end (shake → countdown → alerts → call)
+3. Verify SMS sends via native `expo-sms`
+4. Verify map loads with OSM tiles
+5. Build APK via `npx eas build`

@@ -1,0 +1,93 @@
+{
+  "best_model": "LightGBM",
+  "best_accuracy": 0.9943019943019943,
+  "districts_cached": 1032,
+  "states_cached": 36,
+  "models": {
+    "RandomForest": {
+      "cv_mean": 0.9814971751412429,
+      "cv_std": 0.004921257454854344,
+      "test_accuracy": 0.9817663817663818,
+      "feature_importance": {
+        "rape": 0.127,
+        "kidnapping": 0.155,
+        "dowry": 0.036,
+        "assault": 0.196,
+        "insult": 0.088,
+        "cruelty": 0.287,
+        "total_crimes": 0.032,
+        "risk_score": 0.021,
+        "rape_ratio": 0.018,
+        "kidnap_ratio": 0.018,
+        "domestic_ratio": 0.009,
+        "assault_ratio": 0.020,
+        "crime_trend": 0.006,
+        "state_enc": 0.006,
+        "district_enc": 0.006,
+        "year": 0.004,
+        "police_total": 0.009,
+        "ipc_total": 0.012
+      }
+    },
+    "LogisticRegression": {
+      "cv_mean": 0.9963276836158192,
+      "cv_std": 0.001967286479828282,
+      "test_accuracy": 0.992022792022792
+    },
+    "KNN": {
+      "cv_mean": 0.95,
+      "cv_std": 0.005999084910055182,
+      "test_accuracy": 0.954985754985755
+    },
+    "XGBoost": {
+      "cv_mean": 0.9860169491525423,
+      "cv_std": 0.002803592265717377,
+      "test_accuracy": 0.9863247863247864,
+      "feature_importance": {
+        "rape": 0.042,
+        "kidnapping": 0.052,
+        "dowry": 0.011,
+        "assault": 0.114,
+        "insult": 0.021,
+        "cruelty": 0.581,
+        "total_crimes": 0.028,
+        "risk_score": 0.019,
+        "rape_ratio": 0.031,
+        "kidnap_ratio": 0.030,
+        "domestic_ratio": 0.012,
+        "assault_ratio": 0.045,
+        "crime_trend": 0.005,
+        "state_enc": 0.006,
+        "district_enc": 0.007,
+        "year": 0.006,
+        "police_total": 0.008,
+        "ipc_total": 0.010
+      }
+    },
+    "LightGBM": {
+      "cv_mean": 0.993502824858757,
+      "cv_std": 0.0018087921574669165,
+      "test_accuracy": 0.9943019943019943,
+      "feature_importance": {
+        "rape": 1443,
+        "kidnapping": 1269,
+        "dowry": 471,
+        "assault": 1747,
+        "insult": 629,
+        "cruelty": 3393,
+        "total_crimes": 890,
+        "risk_score": 1205,
+        "rape_ratio": 807,
+        "kidnap_ratio": 663,
+        "domestic_ratio": 524,
+        "assault_ratio": 1014,
+        "crime_trend": 447,
+        "state_enc": 281,
+        "district_enc": 331,
+        "year": 290,
+        "police_total": 348,
+        "ipc_total": 402
+      }
+    }
+  }
+}

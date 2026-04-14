@@ -1,0 +1,174 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 230 20% 96%;
+    --foreground: 240 20% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 20% 10%;
+
+    --primary: 355 82% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 168 100% 48%;
+    --secondary-foreground: 240 33% 4%;
+
+    --muted: 230 15% 92%;
+    --muted-foreground: 240 10% 45%;
+
+    --accent: 44 100% 70%;
+    --accent-foreground: 240 33% 4%;
+
+    --destructive: 355 82% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 230 15% 88%;
+    --input: 230 15% 88%;
+    --ring: 355 82% 56%;
+
+    --radius: 0.5rem;
+
+    --surface: 230 15% 97%;
+    --surface-hover: 230 15% 93%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 20% 10%;
+    --sidebar-primary: 355 82% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 230 15% 92%;
+    --sidebar-accent-foreground: 240 20% 10%;
+    --sidebar-border: 230 15% 88%;
+    --sidebar-ring: 355 82% 56%;
+  }
+
+  .dark {
+    --background: 240 33% 4%;
+    --foreground: 0 0% 94%;
+
+    --card: 240 20% 8%;
+    --card-foreground: 0 0% 94%;
+
+    --popover: 240 20% 8%;
+    --popover-foreground: 0 0% 94%;
+
+    --primary: 355 82% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 168 100% 48%;
+    --secondary-foreground: 240 33% 4%;
+
+    --muted: 240 15% 15%;
+    --muted-foreground: 240 15% 60%;
+
+    --accent: 44 100% 70%;
+    --accent-foreground: 240 33% 4%;
+
+    --destructive: 355 82% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 20% 15%;
+    --input: 240 20% 15%;
+    --ring: 355 82% 56%;
+
+    --surface: 240 20% 8%;
+    --surface-hover: 240 20% 12%;
+
+    --sidebar-background: 240 20% 8%;
+    --sidebar-foreground: 0 0% 94%;
+    --sidebar-primary: 355 82% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 20% 15%;
+    --sidebar-accent-foreground: 0 0% 94%;
+    --sidebar-border: 240 20% 15%;
+    --sidebar-ring: 355 82% 56%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+}
+
+@layer utilities {
+  .glow-crimson {
+    text-shadow: 0 0 20px hsl(355 82% 56% / 0.6), 0 0 40px hsl(355 82% 56% / 0.3);
+  }
+
+  .glow-teal {
+    text-shadow: 0 0 20px hsl(168 100% 48% / 0.6), 0 0 40px hsl(168 100% 48% / 0.3);
+  }
+
+  .glow-amber {
+    text-shadow: 0 0 20px hsl(44 100% 70% / 0.6), 0 0 40px hsl(44 100% 70% / 0.3);
+  }
+
+  .glass-panel {
+    @apply bg-card/85 backdrop-blur-xl border border-border;
+  }
+
+  .dark .glass-panel {
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(240 20% 15%);
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .dark .grid-bg {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .shimmer {
+    background: linear-gradient(90deg, hsl(var(--muted)) 0%, hsl(var(--muted-foreground) / 0.2) 50%, hsl(var(--muted)) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes count-up-fade {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-count-up {
+    animation: count-up-fade 0.6s ease-out forwards;
+  }
+}
