@@ -6,10 +6,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
-import * as Notifications from 'expo-notifications';
-import { useSettingsStore } from '../store/settingsStore';
-import { useGuardianStore } from '../store/guardianStore';
-import { colors, fontSize, spacing, radius } from '../constants/theme';
+// expo-notifications push registration removed — not supported in Expo Go SDK 53+
+import { useSettingsStore } from '../../store/settingsStore';
+import { useGuardianStore } from '../../store/guardianStore';
+import { colors, fontSize, spacing, radius } from '../../constants/theme';
 
 const STEPS = ['Welcome', 'Permissions', 'Profile', 'Guardians', 'Ready'];
 
@@ -27,20 +27,20 @@ export default function OnboardingScreen() {
   const requestPermissions = async () => {
     try {
       await Location.requestForegroundPermissionsAsync();
-      await Notifications.requestPermissionsAsync();
+      // Note: expo-notifications push registration is not supported in Expo Go SDK 53+
+      // It works in production builds (EAS Build)
       setPermsGranted(true);
     } catch {
       setPermsGranted(true); // Continue anyway
     }
   };
 
-  const finish = () => {
+  const finish = async () => {
     if (name) update({ profileName: name, bloodGroup: blood, isOnboarded: true });
     else update({ isOnboarded: true });
 
     if (gName && gPhone) {
-      addGuardian({
-        id: Date.now().toString(),
+      await addGuardian({
         name: gName, phone: gPhone, email: '',
         relation: 'Guardian', priority: 1,
       });

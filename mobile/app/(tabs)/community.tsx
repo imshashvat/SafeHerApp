@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   SafeAreaView, TextInput, Alert,
@@ -27,24 +27,6 @@ const TAG_COLORS: Record<string, string> = {
   'Support': colors.warning,
 };
 
-const SAMPLE_POSTS: Post[] = [
-  {
-    id: '1', author: 'Priya M.', tag: 'Safety Tip',
-    content: 'Avoid the underpass near Sector 18 after 9pm — very poorly lit.',
-    timestamp: Date.now() - 3600000, likes: 14,
-  },
-  {
-    id: '2', author: 'Ananya K.', tag: 'Safe Zone',
-    content: 'The 24/7 pharmacy on MG Road is always open and has security cameras — great safe spot.',
-    timestamp: Date.now() - 7200000, likes: 28,
-  },
-  {
-    id: '3', author: 'Sneha R.', tag: 'Travel Partner',
-    content: 'Looking for a travel companion from Noida to Connaught Place tomorrow morning ~9am. DM me!',
-    timestamp: Date.now() - 1800000, likes: 6,
-  },
-];
-
 function timeAgo(ts: number) {
   const diff = (Date.now() - ts) / 1000;
   if (diff < 60) return 'just now';
@@ -54,12 +36,39 @@ function timeAgo(ts: number) {
 }
 
 export default function CommunityScreen() {
-  const [posts, setPosts] = useState<Post[]>(SAMPLE_POSTS);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [showCompose, setShowCompose] = useState(false);
   const [content, setContent] = useState('');
   const [selectedTag, setSelectedTag] = useState(TAGS[0]);
   const [authorName, setAuthorName] = useState('');
   const [filter, setFilter] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // Load posts from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(POSTS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Post[];
+          setPosts(parsed);
+        }
+      } catch (err) {
+        console.error('Failed to load community posts', err);
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  // Persist posts whenever they change
+  const savePosts = async (updated: Post[]) => {
+    setPosts(updated);
+    try {
+      await AsyncStorage.setItem(POSTS_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.error('Failed to save community posts', err);
+    }
+  };
 
   const addPost = () => {
     if (!content.trim()) return;
@@ -71,12 +80,19 @@ export default function CommunityScreen() {
       timestamp: Date.now(),
       likes: 0,
     };
-    setPosts([newPost, ...posts]);
+    savePosts([newPost, ...posts]);
     setContent(''); setShowCompose(false);
   };
 
   const likePost = (id: string) => {
-    setPosts(posts.map((p) => p.id === id ? { ...p, likes: p.likes + 1 } : p));
+    savePosts(posts.map((p) => p.id === id ? { ...p, likes: p.likes + 1 } : p));
+  };
+
+  const deletePost = (id: string) => {
+    Alert.alert('Delete Post', 'Are you sure?', [
+      { text: 'Cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => savePosts(posts.filter(p => p.id !== id)) },
+    ]);
   };
 
   const filtered = filter ? posts.filter((p) => p.tag === filter) : posts;
@@ -86,7 +102,7 @@ export default function CommunityScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Community</Text>
-          <Text style={styles.subtitle}>Women-only safety network</Text>
+          <Text style={styles.subtitle}>Women-only safety network · {posts.length} posts</Text>
         </View>
         <TouchableOpacity
           style={styles.composeBtn}
@@ -156,27 +172,45 @@ export default function CommunityScreen() {
 
         {/* Posts */}
         <View style={styles.posts}>
-          {filtered.map((post) => (
-            <View key={post.id} style={styles.postCard}>
-              <View style={styles.postHeader}>
-                <View style={styles.postAvatar}>
-                  <Text style={styles.postAvatarText}>{post.author.charAt(0)}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.postAuthor}>{post.author}</Text>
-                  <Text style={styles.postTime}>{timeAgo(post.timestamp)}</Text>
-                </View>
-                <View style={[styles.postTag, { backgroundColor: TAG_COLORS[post.tag] + '22', borderColor: TAG_COLORS[post.tag] + '55' }]}>
-                  <Text style={[styles.postTagText, { color: TAG_COLORS[post.tag] }]}>{post.tag}</Text>
-                </View>
-              </View>
-              <Text style={styles.postContent}>{post.content}</Text>
-              <TouchableOpacity style={styles.likeRow} onPress={() => likePost(post.id)}>
-                <Ionicons name="heart-outline" size={16} color={colors.primary} />
-                <Text style={styles.likeCount}>{post.likes}</Text>
+          {filtered.length === 0 ? (
+            <View style={styles.empty}>
+              <Ionicons name="chatbubbles-outline" size={56} color={colors.textMuted} />
+              <Text style={styles.emptyTitle}>No posts yet</Text>
+              <Text style={styles.emptySub}>
+                Be the first to share a safety tip,{'\n'}report an incident, or find a travel companion.
+              </Text>
+              <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCompose(true)}>
+                <Text style={styles.emptyBtnText}>Create First Post</Text>
               </TouchableOpacity>
             </View>
-          ))}
+          ) : (
+            filtered.map((post) => (
+              <View key={post.id} style={styles.postCard}>
+                <View style={styles.postHeader}>
+                  <View style={styles.postAvatar}>
+                    <Text style={styles.postAvatarText}>{post.author.charAt(0)}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.postAuthor}>{post.author}</Text>
+                    <Text style={styles.postTime}>{timeAgo(post.timestamp)}</Text>
+                  </View>
+                  <View style={[styles.postTag, { backgroundColor: TAG_COLORS[post.tag] + '22', borderColor: TAG_COLORS[post.tag] + '55' }]}>
+                    <Text style={[styles.postTagText, { color: TAG_COLORS[post.tag] }]}>{post.tag}</Text>
+                  </View>
+                </View>
+                <Text style={styles.postContent}>{post.content}</Text>
+                <View style={styles.postActions}>
+                  <TouchableOpacity style={styles.likeRow} onPress={() => likePost(post.id)}>
+                    <Ionicons name="heart-outline" size={16} color={colors.primary} />
+                    <Text style={styles.likeCount}>{post.likes}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deletePost(post.id)}>
+                    <Ionicons name="trash-outline" size={14} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -230,6 +264,11 @@ const styles = StyleSheet.create({
   filterText: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '600' },
   filterTextActive: { color: colors.primary },
   posts: { padding: spacing.lg, paddingTop: 0, gap: spacing.md, paddingBottom: 60 },
+  empty: { alignItems: 'center', paddingVertical: 60, gap: spacing.md },
+  emptyTitle: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '800' },
+  emptySub: { color: colors.textMuted, fontSize: fontSize.md, textAlign: 'center', lineHeight: 22 },
+  emptyBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.md },
   postCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.lg,
     borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm,
@@ -248,6 +287,7 @@ const styles = StyleSheet.create({
   },
   postTagText: { fontSize: 10, fontWeight: '700' },
   postContent: { color: colors.textSecondary, fontSize: fontSize.md, lineHeight: 22 },
+  postActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   likeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   likeCount: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '600' },
 });

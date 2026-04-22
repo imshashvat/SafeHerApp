@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useGuardianStore } from '../../store/guardianStore';
+import { useAuthStore } from '../../store/authStore';
 import { quickCall } from '../../services/alertService';
 import { HELPLINES } from '../../constants/helplines';
 import { colors, fontSize, spacing, radius } from '../../constants/theme';
@@ -15,6 +16,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { profileName, bloodGroup, medicalNotes, update } = useSettingsStore();
   const { guardians } = useGuardianStore();
+  const { currentUser, logout } = useAuthStore();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(profileName);
   const [blood, setBlood] = useState(bloodGroup);
@@ -168,6 +170,20 @@ export default function ProfileScreen() {
           <Text style={styles.historyBtnText}>Settings</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </TouchableOpacity>
+
+        {/* Logout */}
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={() => {
+            Alert.alert('Logout', 'Are you sure?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Logout', style: 'destructive', onPress: () => logout() },
+            ]);
+          }}
+        >
+          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -265,4 +281,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border, padding: spacing.md,
   },
   historyBtnText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.md, fontWeight: '600' },
+  logoutBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.dangerGlow, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.danger + '44', padding: spacing.md,
+    justifyContent: 'center',
+  },
+  logoutText: { color: colors.danger, fontSize: fontSize.md, fontWeight: '700' },
 });

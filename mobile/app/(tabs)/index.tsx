@@ -23,13 +23,15 @@ export default function HomeScreen() {
   const router = useRouter();
   const { guardians } = useGuardianStore();
   const { status } = useSOSStore();
-  const { shakeSensitivity, fallDetection, isOnboarded } = useSettingsStore();
+  const { shakeSensitivity, fallDetection, isOnboarded, loaded } = useSettingsStore();
 
   useEffect(() => {
-    if (!isOnboarded) {
+    // Only redirect AFTER user-specific settings have been loaded from SQLite
+    // Without this guard, isOnboarded is always false on first render → crash
+    if (loaded && !isOnboarded) {
       router.replace('/onboarding');
     }
-  }, [isOnboarded]);
+  }, [loaded, isOnboarded]);
 
   const quickActions = [
     {
@@ -55,6 +57,23 @@ export default function HomeScreen() {
       icon: 'shield-checkmark-outline' as const,
       color: colors.warning,
       onPress: () => router.push('/safety-hub'),
+    },
+  ];
+
+  const intelligenceActions = [
+    {
+      label: 'Crime Dashboard',
+      desc: 'NCRB stats, state rankings, ML model insights',
+      icon: 'bar-chart-outline' as const,
+      color: '#e67e22',
+      onPress: () => router.push('/dashboard'),
+    },
+    {
+      label: 'Route Safety',
+      desc: 'Analyze any route for crime risk',
+      icon: 'navigate-outline' as const,
+      color: '#3498db',
+      onPress: () => router.push('/route-safety'),
     },
   ];
 
@@ -115,6 +134,28 @@ export default function HomeScreen() {
             >
               <Ionicons name={a.icon} size={26} color={a.color} />
               <Text style={styles.quickLabel}>{a.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Intelligence Section */}
+        <Text style={styles.sectionTitle}>INTELLIGENCE</Text>
+        <View style={styles.intelCards}>
+          {intelligenceActions.map((a) => (
+            <TouchableOpacity
+              key={a.label}
+              style={styles.intelCard}
+              onPress={a.onPress}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.intelIconBg, { backgroundColor: a.color + '18' }]}>
+                <Ionicons name={a.icon} size={24} color={a.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.intelLabel}>{a.label}</Text>
+                <Text style={styles.intelDesc}>{a.desc}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           ))}
         </View>
@@ -299,4 +340,27 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   historyText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.sm, fontWeight: '600' },
+  intelCards: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  intelCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  intelIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  intelLabel: { color: colors.textPrimary, fontSize: fontSize.md, fontWeight: '700' },
+  intelDesc: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 1 },
 });

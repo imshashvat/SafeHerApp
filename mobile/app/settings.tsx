@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
+import { useAuthStore } from '../store/authStore';
 import { colors, fontSize, spacing, radius } from '../constants/theme';
 
 const SENSITIVITY_LABELS = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
@@ -43,8 +44,27 @@ export default function SettingsScreen() {
   const {
     shakeSensitivity, fallDetection, voiceKeyword, autoVideoRecord,
     smsAlerts, emailAlerts, autoCallOnSOS, autoCallGuardian,
+    mapTheme,
     update,
   } = useSettingsStore();
+  const { logout, currentUser } = useAuthStore();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -56,8 +76,51 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* User info */}
+        {currentUser && (
+          <View style={styles.userCard}>
+            <View style={styles.userAvatar}>
+              <Text style={styles.userAvatarText}>
+                {currentUser.name.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.userName}>{currentUser.name}</Text>
+              <Text style={styles.userPhone}>{currentUser.phone}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Map Theme */}
+        <Section title="🗺️ MAP">
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowLabel}>Map Theme</Text>
+              <Text style={styles.rowSub}>
+                {mapTheme === 'light' ? 'Light (Default OSM)' : 'Dark (CartoDB Dark)'}
+              </Text>
+            </View>
+            <View style={styles.themeToggleRow}>
+              <TouchableOpacity
+                style={[styles.themeBtn, mapTheme === 'light' && styles.themeBtnActive]}
+                onPress={() => update({ mapTheme: 'light' })}
+              >
+                <Ionicons name="sunny" size={16} color={mapTheme === 'light' ? '#FFD700' : colors.textMuted} />
+                <Text style={[styles.themeBtnText, mapTheme === 'light' && styles.themeBtnTextActive]}>Light</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.themeBtn, mapTheme === 'dark' && styles.themeBtnActive]}
+                onPress={() => update({ mapTheme: 'dark' })}
+              >
+                <Ionicons name="moon" size={14} color={mapTheme === 'dark' ? '#B0A8C8' : colors.textMuted} />
+                <Text style={[styles.themeBtnText, mapTheme === 'dark' && styles.themeBtnTextActive]}>Dark</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Section>
+
         {/* SOS Detection */}
-        <Section title="🆘 SOS Detection">
+        <Section title="🆘 SOS DETECTION">
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowLabel}>Shake Sensitivity</Text>
@@ -100,7 +163,7 @@ export default function SettingsScreen() {
         </Section>
 
         {/* Alerts */}
-        <Section title="📢 Alert Methods">
+        <Section title="📢 ALERT METHODS">
           <SettingRow
             label="SMS Alerts"
             sublabel="Text guardians on SOS"
@@ -116,7 +179,7 @@ export default function SettingsScreen() {
         </Section>
 
         {/* Auto-Call */}
-        <Section title="📞 Auto-Call">
+        <Section title="📞 AUTO-CALL">
           <SettingRow
             label="Auto-Call 112 on SOS"
             sublabel="Immediately dials emergency services"
@@ -148,6 +211,12 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         ))}
 
+        {/* Logout button */}
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+
         <Text style={styles.version}>SafeHer v1.0.0 · Built for safety</Text>
       </ScrollView>
     </SafeAreaView>
@@ -164,6 +233,19 @@ const styles = StyleSheet.create({
   backBtn: { marginRight: spacing.sm, padding: 4 },
   title: { color: colors.textPrimary, fontSize: fontSize.xl, fontWeight: '700' },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: 60 },
+  userCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.bgCard, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border, padding: spacing.md,
+  },
+  userAvatar: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  userAvatarText: { color: '#fff', fontSize: fontSize.xl, fontWeight: '900' },
+  userName: { color: colors.textPrimary, fontSize: fontSize.lg, fontWeight: '700' },
+  userPhone: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
   section: { gap: spacing.xs },
   sectionTitle: {
     color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700',
@@ -186,12 +268,30 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
   },
   sensitivityValue: { color: colors.textPrimary, fontSize: fontSize.lg, fontWeight: '800', minWidth: 24, textAlign: 'center' },
+  themeToggleRow: { flexDirection: 'row', gap: spacing.xs },
+  themeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radius.full,
+    backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border,
+  },
+  themeBtnActive: {
+    backgroundColor: colors.primaryGlow, borderColor: colors.primary,
+  },
+  themeBtnText: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700' },
+  themeBtnTextActive: { color: colors.primary },
   navRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.bgCard, borderRadius: radius.md,
     borderWidth: 1, borderColor: colors.border, padding: spacing.md,
   },
   navLabel: { flex: 1, color: colors.textSecondary, fontSize: fontSize.md, fontWeight: '600' },
+  logoutBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.dangerGlow, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.danger + '44', padding: spacing.md,
+    justifyContent: 'center',
+  },
+  logoutText: { color: colors.danger, fontSize: fontSize.md, fontWeight: '700' },
   version: {
     color: colors.textMuted, fontSize: fontSize.xs,
     textAlign: 'center', marginTop: spacing.lg,

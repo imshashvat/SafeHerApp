@@ -139,7 +139,7 @@ export default function SafetyHubScreen() {
             <TouchableOpacity
               key={item.label}
               style={styles.resourceRow}
-              onPress={() => Linking.openURL(`https://maps.google.com/?q=${item.query}`)}
+              onPress={() => Linking.openURL(`https://www.openstreetmap.org/search?query=${item.query}`)}
             >
               <View style={styles.resourceIcon}>
                 <Ionicons name={item.icon as any} size={18} color={colors.accent} />

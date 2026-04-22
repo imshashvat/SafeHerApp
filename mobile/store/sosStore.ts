@@ -13,12 +13,21 @@ type SOSLocation = {
   accuracy?: number;
 };
 
+export type DispatchResult = {
+  emailedTo: string[];
+  smsTo: string[];
+  callMade: boolean;
+  errors: string[];
+  noGuardians: boolean;
+};
+
 type SOSStore = {
   status: SOSStatus;
   trigger: 'button' | 'shake' | 'fall' | 'voice' | null;
   location: SOSLocation | null;
   countdownSeconds: number;
   videoUri: string | null;
+  dispatchResult: DispatchResult | null;
 
   startCountdown: (trigger: SOSStore['trigger']) => void;
   cancelSOS: () => void;
@@ -26,6 +35,7 @@ type SOSStore = {
   setLocation: (loc: SOSLocation) => void;
   setVideoUri: (uri: string) => void;
   tickCountdown: () => void;
+  setDispatchResult: (result: DispatchResult) => void;
   reset: () => void;
 };
 
@@ -35,9 +45,10 @@ export const useSOSStore = create<SOSStore>((set, get) => ({
   location: null,
   countdownSeconds: 10,
   videoUri: null,
+  dispatchResult: null,
 
   startCountdown: (trigger) =>
-    set({ status: 'countdown', trigger, countdownSeconds: 10 }),
+    set({ status: 'countdown', trigger, countdownSeconds: 10, dispatchResult: null }),
 
   cancelSOS: () => set({ status: 'cancelled', countdownSeconds: 10 }),
 
@@ -46,6 +57,8 @@ export const useSOSStore = create<SOSStore>((set, get) => ({
   setLocation: (location) => set({ location }),
 
   setVideoUri: (uri) => set({ videoUri: uri }),
+
+  setDispatchResult: (result) => set({ dispatchResult: result }),
 
   tickCountdown: () => {
     const { countdownSeconds } = get();
@@ -63,5 +76,6 @@ export const useSOSStore = create<SOSStore>((set, get) => ({
       location: null,
       countdownSeconds: 10,
       videoUri: null,
+      dispatchResult: null,
     }),
 }));

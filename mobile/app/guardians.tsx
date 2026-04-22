@@ -11,9 +11,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useGuardianStore, Guardian } from '../../store/guardianStore';
-import { quickCall } from '../../services/alertService';
-import { colors, fontSize, spacing, radius } from '../../constants/theme';
+import { useGuardianStore, Guardian } from '../store/guardianStore';
+import { quickCall } from '../services/alertService';
+import { colors, fontSize, spacing, radius } from '../constants/theme';
 
 type RelationType = 'Mother' | 'Father' | 'Sister' | 'Brother' | 'Friend' | 'Partner' | 'Other';
 const RELATIONS: RelationType[] = ['Mother', 'Father', 'Sister', 'Brother', 'Friend', 'Partner', 'Other'];
@@ -25,13 +25,12 @@ function AddGuardianForm({ onAdd }: { onAdd: () => void }) {
   const [email, setEmail] = useState('');
   const [relation, setRelation] = useState<RelationType>('Friend');
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!name.trim() || !phone.trim()) {
       Alert.alert('Required', 'Name and phone are required.');
       return;
     }
-    addGuardian({
-      id: Date.now().toString(),
+    await addGuardian({
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim(),

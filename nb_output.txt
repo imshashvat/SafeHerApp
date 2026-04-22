@@ -1,8 +1,0 @@
-﻿py : C:\Users\shash\AppData\Local\Programs\Python\Python313\python.exe: can't open file 
-'C:\\Users\\shash\\Mini_Project\\read_nb.py': [Errno 2] No such file or directory
-At line:1 char:1
-+ py read_nb.py 2>&1 | Out-File -Encoding utf8 nb_output.txt; Get-Conte ...
-+ ~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (C:\Users\shash\...le or directory:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 

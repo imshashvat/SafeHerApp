@@ -1,41 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAlertHistoryStore } from '../store/alertHistoryStore';
 import { colors, fontSize, spacing, radius } from '../constants/theme';
-
-const ALERTS_KEY = '@safeher_alert_history';
-
-type AlertLog = {
-  id: string;
-  trigger: string;
-  timestamp: number;
-  location: string;
-  status: 'sent' | 'cancelled';
-  sentTo: number;
-};
-
-function timeAgo(ts: number) {
-  const diff = (Date.now() - ts) / 1000;
-  if (diff < 60) return 'Just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return new Date(ts).toLocaleDateString('en-IN');
-}
-
-const SAMPLE_HISTORY: AlertLog[] = [
-  {
-    id: '1', trigger: 'Shake Detected', timestamp: Date.now() - 86400000 * 2,
-    location: '28.6139, 77.2090', status: 'sent', sentTo: 3,
-  },
-  {
-    id: '2', trigger: 'SOS Button', timestamp: Date.now() - 86400000 * 5,
-    location: '19.0760, 72.8777', status: 'cancelled', sentTo: 0,
-  },
-];
 
 const TRIGGER_ICONS: Record<string, string> = {
   'SOS Button': '🆘',
@@ -44,9 +14,20 @@ const TRIGGER_ICONS: Record<string, string> = {
   'Voice Keyword': '🎤',
 };
 
+function timeAgo(ts: number) {
+  const diff = (Date.now() - ts) / 1000;
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export default function AlertHistoryScreen() {
   const router = useRouter();
-  const [history] = useState<AlertLog[]>(SAMPLE_HISTORY);
+  const { alerts, clearHistory } = useAlertHistoryStore();
+
+  const sentCount = alerts.filter(a => a.status === 'sent').length;
+  const cancelledCount = alerts.filter(a => a.status === 'cancelled').length;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -55,39 +36,43 @@ export default function AlertHistoryScreen() {
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>Alert History</Text>
+        {alerts.length > 0 && (
+          <TouchableOpacity onPress={() => clearHistory()} style={styles.clearBtn}>
+            <Text style={styles.clearText}>Clear</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Summary cards */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{history.length}</Text>
+            <Text style={styles.statValue}>{alerts.length}</Text>
             <Text style={styles.statLabel}>Total Alerts</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={[styles.statValue, { color: colors.success }]}>
-              {history.filter((a) => a.status === 'sent').length}
-            </Text>
+            <Text style={[styles.statValue, { color: colors.success }]}>{sentCount}</Text>
             <Text style={styles.statLabel}>Sent</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={[styles.statValue, { color: colors.warning }]}>
-              {history.filter((a) => a.status === 'cancelled').length}
-            </Text>
+            <Text style={[styles.statValue, { color: colors.warning }]}>{cancelledCount}</Text>
             <Text style={styles.statLabel}>Cancelled</Text>
           </View>
         </View>
 
         <Text style={styles.sectionLabel}>RECENT ALERTS</Text>
 
-        {history.length === 0 ? (
+        {alerts.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="shield-checkmark-outline" size={64} color={colors.success} />
             <Text style={styles.emptyTitle}>All Clear!</Text>
-            <Text style={styles.emptySub}>No SOS alerts have been fired. Stay safe! 💚</Text>
+            <Text style={styles.emptySub}>No SOS alerts have been fired yet.{'\n'}Stay safe! 💚</Text>
+            <Text style={styles.emptyHint}>
+              Alerts will appear here when you use the SOS button,{'\n'}or when shake/fall detection triggers an emergency.
+            </Text>
           </View>
         ) : (
-          history.map((log) => (
+          alerts.map((log) => (
             <View key={log.id} style={[styles.logCard, log.status === 'cancelled' && styles.logCardCancelled]}>
               <View style={styles.logHeader}>
                 <Text style={styles.logEmoji}>{TRIGGER_ICONS[log.trigger] ?? '🔔'}</Text>
@@ -118,8 +103,12 @@ export default function AlertHistoryScreen() {
                     <Ionicons name="people-outline" size={14} color={colors.textMuted} />
                     <Text style={styles.logDetailText}>
                       Alerted {log.sentTo} guardian{log.sentTo !== 1 ? 's' : ''}
+                      {log.guardianNames.length > 0 ? ` (${log.guardianNames.join(', ')})` : ''}
                     </Text>
                   </View>
+                  <Text style={styles.logTimestamp}>
+                    {new Date(log.timestamp).toLocaleString('en-IN')}
+                  </Text>
                 </>
               )}
             </View>
@@ -138,7 +127,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   backBtn: { marginRight: spacing.sm, padding: 4 },
-  title: { color: colors.textPrimary, fontSize: fontSize.xl, fontWeight: '700' },
+  title: { flex: 1, color: colors.textPrimary, fontSize: fontSize.xl, fontWeight: '700' },
+  clearBtn: { padding: 4 },
+  clearText: { color: colors.danger, fontSize: fontSize.sm, fontWeight: '600' },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: 60 },
   statsRow: { flexDirection: 'row', gap: spacing.sm },
   statCard: {
@@ -151,6 +142,7 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', paddingVertical: 60, gap: spacing.md },
   emptyTitle: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '800' },
   emptySub: { color: colors.textMuted, fontSize: fontSize.md, textAlign: 'center' },
+  emptyHint: { color: colors.textMuted, fontSize: fontSize.xs, textAlign: 'center', lineHeight: 18, marginTop: spacing.md },
   logCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.lg,
     borderWidth: 1, borderColor: colors.border,
@@ -167,5 +159,6 @@ const styles = StyleSheet.create({
   },
   statusText: { fontSize: fontSize.xs, fontWeight: '800', letterSpacing: 1 },
   logDetail: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  logDetailText: { color: colors.textSecondary, fontSize: fontSize.xs },
+  logDetailText: { color: colors.textSecondary, fontSize: fontSize.xs, flex: 1 },
+  logTimestamp: { color: colors.textMuted, fontSize: 9, marginTop: spacing.xs },
 });

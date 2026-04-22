@@ -1,26 +1,46 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-venv/
-.env
-
-# ML Models
-backend/ml/models/*.pkl
-backend/data/raw/
-
-# Node
+# Node / React Native
 node_modules/
-frontend/node_modules/
-frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Expo
+.expo/
+dist/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Android
+mobile/android/.gradle/
+mobile/android/.kotlin/
+mobile/android/app/build/
+mobile/android/build/
+*.apk
+*.aab
+
+# iOS
+*.xcworkspace
+*.xcodeproj
+Pods/
+
+# Environment
+.env
+.env.local
+.env.*.local
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
+
+# SQLite database (created at runtime)
+*.db

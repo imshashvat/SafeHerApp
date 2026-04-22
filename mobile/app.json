@@ -41,12 +41,14 @@
         "android.permission.VIBRATE",
         "android.permission.WAKE_LOCK",
         "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
         "android.permission.CALL_PHONE",
         "android.permission.RECEIVE_BOOT_COMPLETED"
       ]
     },
     "plugins": [
       "expo-router",
+      "expo-sqlite",
       [
         "expo-camera",
         {
@@ -63,7 +65,9 @@
       [
         "expo-notifications",
         {
-          "color": "#e91e8c"
+          "icon": "./assets/icon.png",
+          "color": "#FF3366",
+          "defaultChannel": "safeher_background"
         }
       ]
     ],

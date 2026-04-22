@@ -1,46 +1,88 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, Linking, Share,
+  View, Text, StyleSheet, TouchableOpacity,
+  SafeAreaView, Share, Linking as RNLinking, Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import LeafletMapView from '../components/LeafletMapView';
 import { colors, fontSize, spacing, radius } from '../constants/theme';
+import { crimeDataService } from '../services/crimeDataService';
 
 export default function LiveTrackingScreen() {
   const router = useRouter();
   const [tracking, setTracking] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [districtInfo, setDistrictInfo] = useState<{ name: string; state: string; risk: string; color: string; crimes: number } | null>(null);
+  const watchRef = useRef<Location.LocationSubscription | null>(null);
 
   const startTracking = async () => {
     setLoading(true);
     const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return setLoading(false);
+    if (status !== 'granted') { setLoading(false); return; }
+
     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-    setLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+    const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+    setLocation(coords);
     setTracking(true);
     setLoading(false);
+
+    // Reverse geocode to get district name
+    fetchDistrictRisk(coords.lat, coords.lng);
+
+    // Watch position updates
+    watchRef.current = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, timeInterval: 30000, distanceInterval: 100 },
+      (newLoc) => {
+        const newCoords = { lat: newLoc.coords.latitude, lng: newLoc.coords.longitude };
+        setLocation(newCoords);
+        fetchDistrictRisk(newCoords.lat, newCoords.lng);
+      }
+    );
+  };
+
+  const fetchDistrictRisk = async (lat: number, lng: number) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&zoom=10`,
+        { headers: { 'Accept-Language': 'en', 'User-Agent': 'SafeHer/1.0' } }
+      );
+      const data = await res.json() as { address?: Record<string, string> };
+      const addr = data.address ?? {};
+      const stateName = addr.state ?? '';
+      const districtName = addr.county ?? addr.state_district ?? addr.city ?? '';
+
+      if (stateName && districtName) {
+        const risk = crimeDataService.getDistrictRisk(stateName, districtName, new Date().getHours());
+        setDistrictInfo({
+          name: districtName,
+          state: stateName,
+          risk: risk.risk_level,
+          color: risk.color,
+          crimes: risk.total_crimes,
+        });
+      }
+    } catch { /* Silently fail */ }
   };
 
   const stopTracking = () => {
+    if (watchRef.current) { watchRef.current.remove(); watchRef.current = null; }
     setTracking(false);
     setLocation(null);
+    setDistrictInfo(null);
   };
+
+  useEffect(() => { return () => { if (watchRef.current) watchRef.current.remove(); }; }, []);
 
   const shareLocation = async () => {
     if (!location) return;
-    const url = `https://maps.google.com/?q=${location.lat},${location.lng}`;
+    const osmLink = `https://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lng}&zoom=16`;
+    const gMapsLink = `https://maps.google.com/?q=${location.lat},${location.lng}`;
     await Share.share({
-      message: `📍 My current location (SafeHer):\n${url}\n\nLat: ${location.lat.toFixed(5)}, Lng: ${location.lng.toFixed(5)}`,
-      url,
+      message: `📍 My live location (SafeHer):\n🗺️ OSM: ${osmLink}\n📌 Google: ${gMapsLink}\n\nGPS: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}\n⚡ Sent via SafeHer Safety App`,
     });
-  };
-
-  const openInMaps = () => {
-    if (!location) return;
-    Linking.openURL(`https://maps.google.com/?q=${location.lat},${location.lng}`);
   };
 
   return (
@@ -49,86 +91,79 @@ export default function LiveTrackingScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Live Tracking</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Status card */}
-        <View style={[styles.statusCard, tracking && styles.statusCardActive]}>
-          <View style={styles.statusRow}>
-            <View style={[styles.statusDot, { backgroundColor: tracking ? colors.success : colors.textMuted }]} />
-            <Text style={styles.statusLabel}>
-              {tracking ? 'Location Active' : 'Tracking Off'}
-            </Text>
-          </View>
-          {location && (
-            <Text style={styles.coords}>
-              {location.lat.toFixed(5)}°N, {location.lng.toFixed(5)}°E
-            </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Live Tracking</Text>
+          {tracking && districtInfo && (
+            <Text style={styles.subtitle}>{districtInfo.name}, {districtInfo.state}</Text>
           )}
         </View>
-
-        {/* Map placeholder using OSM */}
-        {tracking && location && (
-          <TouchableOpacity style={styles.mapCard} onPress={openInMaps} activeOpacity={0.85}>
-            <View style={styles.mapPlaceholder}>
-              <Ionicons name="location" size={48} color={colors.primary} />
-              <Text style={styles.mapLabel}>Tap to Open in Maps</Text>
-              <Text style={styles.mapSub}>
-                {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
-              </Text>
-            </View>
-          </TouchableOpacity>
+        {tracking && districtInfo && (
+          <View style={[styles.riskBadge, { backgroundColor: `${districtInfo.color}20` }]}>
+            <Text style={[styles.riskBadgeText, { color: districtInfo.color }]}>{districtInfo.risk}</Text>
+          </View>
         )}
+      </View>
 
-        {/* Actions */}
-        {!tracking ? (
-          <TouchableOpacity
-            style={styles.startBtn}
-            onPress={startTracking}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="locate" size={22} color="#fff" />
-            <Text style={styles.startBtnText}>
-              {loading ? 'Getting Location...' : 'Start Tracking'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.activeActions}>
+      {tracking && location ? (
+        <View style={{ flex: 1 }}>
+          <LeafletMapView
+            style={styles.map}
+            center={[location.lat, location.lng]}
+            zoom={15}
+            userLat={location.lat}
+            userLng={location.lng}
+            markers={[{
+              lat: location.lat,
+              lng: location.lng,
+              color: districtInfo?.color || colors.primary,
+              popup: districtInfo ? `${districtInfo.name} — ${districtInfo.risk}` : 'You are here',
+            }]}
+          />
+
+          {/* Info overlay */}
+          {districtInfo && (
+            <View style={styles.infoOverlay}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.infoDistrict}>{districtInfo.name}</Text>
+                <Text style={styles.infoState}>{districtInfo.state} · {districtInfo.crimes.toLocaleString()} crimes (NCRB)</Text>
+              </View>
+              <View style={[styles.scoreCircle, { borderColor: districtInfo.color }]}>
+                <Text style={[styles.scoreText, { color: districtInfo.color }]}>
+                  {districtInfo.risk === 'SAFE' ? '🟢' : districtInfo.risk === 'MODERATE' ? '🟡' : '🔴'}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Bottom actions */}
+          <View style={styles.bottomActions}>
             <TouchableOpacity style={styles.shareBtn} onPress={shareLocation}>
               <Ionicons name="share-outline" size={20} color="#fff" />
-              <Text style={styles.shareBtnText}>Share My Location</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.mapsBtn} onPress={openInMaps}>
-              <Ionicons name="map-outline" size={20} color={colors.accent} />
-              <Text style={styles.mapsBtnText}>Open in Maps</Text>
+              <Text style={styles.shareBtnText}>Share Location</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.stopBtn} onPress={stopTracking}>
               <Ionicons name="stop-circle-outline" size={20} color={colors.danger} />
-              <Text style={styles.stopBtnText}>Stop Tracking</Text>
+              <Text style={styles.stopBtnText}>Stop</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* Info */}
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>How it works</Text>
-          {[
-            'Your GPS coordinates are captured from your device.',
-            'Share a Google Maps link with your guardians instantly.',
-            'Tap "Open in Maps" to see your location on a full map.',
-            'During SOS, your location is auto-sent to all guardians.',
-          ].map((tip, i) => (
-            <View key={i} style={styles.tipRow}>
-              <View style={styles.tipNum}>
-                <Text style={styles.tipNumText}>{i + 1}</Text>
-              </View>
-              <Text style={styles.tipText}>{tip}</Text>
-            </View>
-          ))}
         </View>
-      </ScrollView>
+      ) : (
+        <View style={styles.startContainer}>
+          <View style={styles.startIcon}>
+            <Ionicons name="locate" size={60} color={colors.primary} />
+          </View>
+          <Text style={styles.startTitle}>Real-Time Location Tracking</Text>
+          <Text style={styles.startDesc}>
+            Track your location live on the map.{'\n'}
+            See your district's safety risk from NCRB data.{'\n'}
+            Share your GPS with guardians instantly.
+          </Text>
+          <TouchableOpacity style={styles.startBtn} onPress={startTracking} disabled={loading}>
+            <Ionicons name="navigate" size={22} color="#fff" />
+            <Text style={styles.startBtnText}>{loading ? 'Getting Location…' : 'Start Tracking'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -136,67 +171,62 @@ export default function LiveTrackingScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  backBtn: { marginRight: spacing.sm, padding: 4 },
+  backBtn: { padding: 4 },
   title: { color: colors.textPrimary, fontSize: fontSize.xl, fontWeight: '700' },
-  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: 60 },
-  statusCard: {
-    backgroundColor: colors.bgCard, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: spacing.xs,
+  subtitle: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 1 },
+  riskBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
+  riskBadgeText: { fontSize: fontSize.xs, fontWeight: '800', letterSpacing: 1 },
+  map: { flex: 1 },
+  markerOuter: {
+    width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  statusCardActive: { borderColor: colors.success },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
-  statusLabel: { color: colors.textPrimary, fontSize: fontSize.lg, fontWeight: '700' },
-  coords: { color: colors.textMuted, fontSize: fontSize.sm, fontFamily: 'monospace' },
-  mapCard: {
-    backgroundColor: colors.bgCard, borderRadius: radius.xl,
-    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
-    height: 200,
+  markerInner: { width: 14, height: 14, borderRadius: 7 },
+  infoOverlay: {
+    position: 'absolute', top: 16, left: 16, right: 16,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: 'rgba(15,10,30,0.9)', borderRadius: radius.md,
+    padding: spacing.md, borderWidth: 1, borderColor: colors.border,
   },
-  mapPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  mapLabel: { color: colors.textPrimary, fontSize: fontSize.lg, fontWeight: '700' },
-  mapSub: { color: colors.textMuted, fontSize: fontSize.sm },
+  infoDistrict: { color: colors.textPrimary, fontSize: fontSize.md, fontWeight: '700' },
+  infoState: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
+  scoreCircle: {
+    width: 44, height: 44, borderRadius: 22, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(15,10,30,0.8)',
+  },
+  scoreText: { fontSize: 20 },
+  bottomActions: {
+    position: 'absolute', bottom: 30, left: 16, right: 16,
+    flexDirection: 'row', gap: spacing.sm,
+  },
+  shareBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md,
+  },
+  shareBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.md },
+  stopBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.xs, backgroundColor: 'rgba(15,10,30,0.9)', borderRadius: radius.md,
+    padding: spacing.md, borderWidth: 1, borderColor: colors.danger + '55',
+    paddingHorizontal: spacing.lg,
+  },
+  stopBtnText: { color: colors.danger, fontWeight: '700', fontSize: fontSize.md },
+  startContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.lg },
+  startIcon: {
+    width: 120, height: 120, borderRadius: 60,
+    backgroundColor: colors.primaryGlow, alignItems: 'center', justifyContent: 'center',
+  },
+  startTitle: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '900', textAlign: 'center' },
+  startDesc: { color: colors.textSecondary, fontSize: fontSize.md, textAlign: 'center', lineHeight: 24 },
   startBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: spacing.sm, backgroundColor: colors.success,
-    borderRadius: radius.lg, padding: spacing.lg,
+    borderRadius: radius.lg, padding: spacing.lg, paddingHorizontal: spacing.xl,
   },
   startBtnText: { color: '#fff', fontSize: fontSize.lg, fontWeight: '800' },
-  activeActions: { gap: spacing.sm },
-  shareBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, backgroundColor: colors.primary,
-    borderRadius: radius.md, padding: spacing.md,
-  },
-  shareBtnText: { color: '#fff', fontSize: fontSize.md, fontWeight: '700' },
-  mapsBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, backgroundColor: colors.bgCard,
-    borderRadius: radius.md, padding: spacing.md,
-    borderWidth: 1, borderColor: colors.accent + '55',
-  },
-  mapsBtnText: { color: colors.accent, fontSize: fontSize.md, fontWeight: '700' },
-  stopBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, backgroundColor: colors.bgCard,
-    borderRadius: radius.md, padding: spacing.md,
-    borderWidth: 1, borderColor: colors.danger + '55',
-  },
-  stopBtnText: { color: colors.danger, fontSize: fontSize.md, fontWeight: '700' },
-  infoCard: {
-    backgroundColor: colors.bgCard, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.md,
-  },
-  infoTitle: { color: colors.textPrimary, fontSize: fontSize.md, fontWeight: '700' },
-  tipRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  tipNum: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: colors.accentGlow, alignItems: 'center', justifyContent: 'center',
-  },
-  tipNumText: { color: colors.accent, fontSize: fontSize.xs, fontWeight: '800' },
-  tipText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.sm, lineHeight: 20 },
 });
