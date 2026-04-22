@@ -1,21 +1,14 @@
 /**
  * useVoiceDetection — Spike-above-baseline detection
  *
- * Problem with fixed threshold:
- *   - Android mic AGC boosts ambient noise to -30 dBFS → false triggers in quiet rooms
- *   - "hello" at conversational volume may be at -25 to -20 dBFS
+ * Keeps a rolling average of ambient noise and triggers when the
+ * current reading is SPIKE_DB above that baseline.
  *
- * Solution — Rolling baseline + spike detection:
- *   - Keep a rolling average of the last N amplitude readings (ambient baseline)
- *   - Only trigger when current reading is SPIKE_DB above that baseline
- *   - Also require minimum absolute level (-35 dBFS) to filter off-mic noise
- *
- * This means: if a quiet room sits at -45 dBFS, a shout at -15 dBFS
- * is 30 dB above baseline → triggers. Normal breathing at -40 dBFS
- * is only 5 dB above baseline → ignored.
+ * Uses refs for all reactive store values to prevent effect re-fires
+ * that would restart the recording and reset baseline.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { Audio } from 'expo-av';
 import { useSOSStore } from '../store/sosStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -32,22 +25,38 @@ const BASELINE_WINDOW = 8;
 // Polling interval (ms)
 const POLL_INTERVAL_MS = 200;
 
-// Cooldown after trigger (ms) — prevent rapid re-triggering
+// Cooldown after trigger (ms)
 const COOLDOWN_MS = 8000;
 
-// Minimum number of consecutive spikes to confirm trigger (debounce)
+// Minimum number of consecutive spikes to confirm trigger
 const MIN_CONSECUTIVE_SPIKES = 2;
 
 export function useVoiceDetection() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const baselineRef = useRef<number[]>([]);     // rolling baseline ring buffer
+  const baselineRef = useRef<number[]>([]);
   const lastTriggerRef = useRef<number>(0);
   const consecutiveSpikesRef = useRef<number>(0);
-  const { startCountdown, status } = useSOSStore();
-  const { voiceKeyword } = useSettingsStore();
+  const mountedRef = useRef(true);
 
-  const stop = useCallback(async () => {
+  // Refs for reactive store values — avoids effect re-fires
+  const statusRef = useRef(useSOSStore.getState().status);
+  const startCountdownRef = useRef(useSOSStore.getState().startCountdown);
+  const voiceKeywordRef = useRef(useSettingsStore.getState().voiceKeyword);
+
+  // Sync refs with store changes
+  useEffect(() => {
+    const unsub1 = useSOSStore.subscribe((state) => {
+      statusRef.current = state.status;
+      startCountdownRef.current = state.startCountdown;
+    });
+    const unsub2 = useSettingsStore.subscribe((state) => {
+      voiceKeywordRef.current = state.voiceKeyword;
+    });
+    return () => { unsub1(); unsub2(); };
+  }, []);
+
+  const stopRecording = async () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -58,10 +67,10 @@ export function useVoiceDetection() {
     }
     baselineRef.current = [];
     consecutiveSpikesRef.current = 0;
-  }, []);
+  };
 
-  const start = useCallback(async () => {
-    if (!voiceKeyword) return;
+  const startRecording = async () => {
+    if (!voiceKeywordRef.current) return;
     try {
       const { status: perm } = await Audio.requestPermissionsAsync();
       if (perm !== 'granted') return;
@@ -79,7 +88,8 @@ export function useVoiceDetection() {
 
       intervalRef.current = setInterval(async () => {
         if (!recordingRef.current) return;
-        if (status !== 'idle') return;
+        if (!mountedRef.current) return;
+        if (statusRef.current !== 'idle') return;
 
         const now = Date.now();
         if (now - lastTriggerRef.current < COOLDOWN_MS) return;
@@ -90,7 +100,7 @@ export function useVoiceDetection() {
 
           const db: number = (recStatus as any).metering ?? -160;
 
-          // Update rolling baseline with this sample
+          // Update rolling baseline
           const baseline = baselineRef.current;
           if (baseline.length >= BASELINE_WINDOW) baseline.shift();
           baseline.push(db);
@@ -104,28 +114,44 @@ export function useVoiceDetection() {
           if (db > MIN_ABSOLUTE_DB && spikeAboveBaseline >= SPIKE_DB) {
             consecutiveSpikesRef.current += 1;
             if (consecutiveSpikesRef.current >= MIN_CONSECUTIVE_SPIKES) {
-              // Confirmed sudden loud sound — trigger SOS
               consecutiveSpikesRef.current = 0;
               lastTriggerRef.current = now;
-              // Reset baseline so next detection starts fresh
               baselineRef.current = [];
-              startCountdown('voice');
+              startCountdownRef.current('voice');
             }
           } else {
-            // Not a spike — reset consecutive counter
             consecutiveSpikesRef.current = 0;
           }
         } catch { /* ignore */ }
       }, POLL_INTERVAL_MS);
     } catch { /* Microphone unavailable or denied */ }
-  }, [voiceKeyword, status, startCountdown]);
+  };
 
+  // Single effect — start/stop based on voiceKeyword
+  // Uses a subscription to react to voiceKeyword changes without re-running the effect
   useEffect(() => {
-    if (voiceKeyword) {
-      start();
-    } else {
-      stop();
+    mountedRef.current = true;
+
+    // Start if enabled at mount
+    if (voiceKeywordRef.current) {
+      startRecording();
     }
-    return () => { stop(); };
-  }, [voiceKeyword, start, stop]);
+
+    // Listen for voiceKeyword changes
+    const unsub = useSettingsStore.subscribe((state, prevState) => {
+      if (state.voiceKeyword !== (prevState as any).voiceKeyword) {
+        if (state.voiceKeyword) {
+          startRecording();
+        } else {
+          stopRecording();
+        }
+      }
+    });
+
+    return () => {
+      mountedRef.current = false;
+      unsub();
+      stopRecording();
+    };
+  }, []); // Empty deps — refs + subscription handle reactivity
 }

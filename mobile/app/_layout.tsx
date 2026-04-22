@@ -13,20 +13,21 @@ import { useVoiceDetection } from '../hooks/useVoiceDetection';
 import { useSOSDispatch } from '../hooks/useSOSDispatch';
 import { crimeDataService } from '../services/crimeDataService';
 import { initDatabase } from '../services/database';
+import { ThemeProvider, useAppTheme } from '../contexts/ThemeContext';
 import {
   startForegroundService,
   configureSilentNotifications,
 } from '../services/backgroundService';
-import { colors } from '../constants/theme';
 
 // Configure notification display behavior immediately (module-level)
 configureSilentNotifications();
 
-export default function RootLayout() {
+function InnerLayout() {
   const { currentUser, isLoggedIn, isLoading: authLoading, restoreSession } = useAuthStore();
   const { load: loadSettings } = useSettingsStore();
   const { load: loadGuardians } = useGuardianStore();
   const { load: loadAlertHistory } = useAlertHistoryStore();
+  const { appTheme, colors } = useAppTheme();
 
   // Initialize database and restore session
   useEffect(() => {
@@ -52,31 +53,29 @@ export default function RootLayout() {
   }, [isLoggedIn, currentUser?.id]);
 
   // ── Global sensor & dispatch hooks ─────────────────────────────────
-  // These run across ALL screens. With the foreground service active,
-  // they continue to run even when the screen is off (native build only).
-  useShakeDetection();   // shake → SOS countdown
-  useFallDetection();    // fall detected → SOS countdown
-  useVoiceDetection();   // loud shout spike → SOS countdown
-  useSOSDispatch();      // countdown → dispatch alerts + reset
+  useShakeDetection();
+  useFallDetection();
+  useVoiceDetection();
+  useSOSDispatch();
 
   // Show loading screen while auth is initializing
   if (authLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <StatusBar style="light" backgroundColor="#0f0a1e" />
+      <View style={[styles.loadingContainer, { backgroundColor: colors.bg }]}>
+        <StatusBar style={appTheme === 'dark' ? 'light' : 'dark'} backgroundColor={colors.bg} />
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>SafeHer</Text>
+        <Text style={[styles.loadingText, { color: colors.primary }]}>SafeHer</Text>
       </View>
     );
   }
 
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <StatusBar style="light" backgroundColor="#0f0a1e" />
+    <>
+      <StatusBar style={appTheme === 'dark' ? 'light' : 'dark'} backgroundColor={colors.bg} />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#0f0a1e' },
+          contentStyle: { backgroundColor: colors.bg },
           animation: 'fade_from_bottom',
         }}
       >
@@ -101,6 +100,16 @@ export default function RootLayout() {
           </>
         )}
       </Stack>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={styles.root}>
+      <ThemeProvider>
+        <InnerLayout />
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
@@ -108,11 +117,11 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   loadingContainer: {
-    flex: 1, backgroundColor: '#0f0a1e',
+    flex: 1,
     alignItems: 'center', justifyContent: 'center', gap: 16,
   },
   loadingText: {
-    color: colors.primary, fontSize: 24,
+    fontSize: 24,
     fontWeight: '900', letterSpacing: 2,
   },
 });

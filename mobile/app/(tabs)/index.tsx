@@ -15,15 +15,17 @@ import CountdownTimer from '../../components/CountdownTimer';
 import { useGuardianStore } from '../../store/guardianStore';
 import { useSOSStore } from '../../store/sosStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { quickCall } from '../../services/alertService';
 import { HELPLINES } from '../../constants/helplines';
-import { colors, fontSize, spacing, radius } from '../../constants/theme';
+import { fontSize, spacing, radius } from '../../constants/theme';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { guardians } = useGuardianStore();
   const { status } = useSOSStore();
   const { shakeSensitivity, fallDetection, isOnboarded, loaded } = useSettingsStore();
+  const { colors } = useAppTheme();
 
   useEffect(() => {
     // Only redirect AFTER user-specific settings have been loaded from SQLite
@@ -78,7 +80,7 @@ export default function HomeScreen() {
   ];
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.container}
@@ -87,11 +89,11 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.appName}>SafeHer</Text>
-            <Text style={styles.tagline}>Your safety, always on</Text>
+            <Text style={[styles.appName, { color: colors.primary }]}>SafeHer</Text>
+            <Text style={[styles.tagline, { color: colors.textMuted }]}>Your safety, always on</Text>
           </View>
           <TouchableOpacity
-            style={styles.settingsBtn}
+            style={[styles.settingsBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
             onPress={() => router.push('/settings')}
           >
             <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
@@ -100,51 +102,51 @@ export default function HomeScreen() {
 
         {/* Status chips */}
         <View style={styles.statusRow}>
-          <View style={styles.statusChip}>
+          <View style={[styles.statusChip, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={[styles.dot, { backgroundColor: guardians.length > 0 ? colors.success : colors.danger }]} />
-            <Text style={styles.statusText}>{guardians.length} Guardian{guardians.length !== 1 ? 's' : ''}</Text>
+            <Text style={[styles.statusText, { color: colors.textSecondary }]}>{guardians.length} Guardian{guardians.length !== 1 ? 's' : ''}</Text>
           </View>
-          <View style={styles.statusChip}>
+          <View style={[styles.statusChip, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={[styles.dot, { backgroundColor: colors.success }]} />
-            <Text style={styles.statusText}>Shake active</Text>
+            <Text style={[styles.statusText, { color: colors.textSecondary }]}>Shake active</Text>
           </View>
-          <View style={styles.statusChip}>
+          <View style={[styles.statusChip, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
             <View style={[styles.dot, { backgroundColor: fallDetection ? colors.success : colors.textMuted }]} />
-            <Text style={styles.statusText}>Fall detect</Text>
+            <Text style={[styles.statusText, { color: colors.textSecondary }]}>Fall detect</Text>
           </View>
         </View>
 
         {/* MAIN SOS BUTTON */}
         <View style={styles.sosArea}>
           <SOSButton />
-          <Text style={styles.sosHint}>
+          <Text style={[styles.sosHint, { color: colors.textMuted }]}>
             Tap · Shake phone · Say "help"
           </Text>
         </View>
 
         {/* Quick actions */}
-        <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>QUICK ACTIONS</Text>
         <View style={styles.quickGrid}>
           {quickActions.map((a) => (
             <TouchableOpacity
               key={a.label}
-              style={[styles.quickCard, { borderColor: a.color + '44' }]}
+              style={[styles.quickCard, { backgroundColor: colors.bgCard, borderColor: a.color + '44' }]}
               onPress={a.onPress}
               activeOpacity={0.75}
             >
               <Ionicons name={a.icon} size={26} color={a.color} />
-              <Text style={styles.quickLabel}>{a.label}</Text>
+              <Text style={[styles.quickLabel, { color: colors.textSecondary }]}>{a.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Intelligence Section */}
-        <Text style={styles.sectionTitle}>INTELLIGENCE</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>INTELLIGENCE</Text>
         <View style={styles.intelCards}>
           {intelligenceActions.map((a) => (
             <TouchableOpacity
               key={a.label}
-              style={styles.intelCard}
+              style={[styles.intelCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
               onPress={a.onPress}
               activeOpacity={0.75}
             >
@@ -152,8 +154,8 @@ export default function HomeScreen() {
                 <Ionicons name={a.icon} size={24} color={a.color} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.intelLabel}>{a.label}</Text>
-                <Text style={styles.intelDesc}>{a.desc}</Text>
+                <Text style={[styles.intelLabel, { color: colors.textPrimary }]}>{a.label}</Text>
+                <Text style={[styles.intelDesc, { color: colors.textMuted }]}>{a.desc}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
             </TouchableOpacity>
@@ -161,25 +163,25 @@ export default function HomeScreen() {
         </View>
 
         {/* Emergency helplines */}
-        <Text style={styles.sectionTitle}>EMERGENCY HELPLINES</Text>
-        <View style={styles.helplinesCard}>
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>EMERGENCY HELPLINES</Text>
+        <View style={[styles.helplinesCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           {HELPLINES.slice(0, 4).map((h) => (
             <TouchableOpacity
               key={h.number}
-              style={styles.helplineRow}
+              style={[styles.helplineRow, { borderBottomColor: colors.border }]}
               onPress={() => quickCall(h.number)}
               activeOpacity={0.7}
             >
               <View style={styles.helplineLeft}>
-                <View style={styles.helplineIconBg}>
+                <View style={[styles.helplineIconBg, { backgroundColor: colors.primaryGlow }]}>
                   <Ionicons name="call" size={16} color={colors.primary} />
                 </View>
                 <View>
-                  <Text style={styles.helplineName}>{h.name}</Text>
-                  <Text style={styles.helplineNumber}>{h.number}</Text>
+                  <Text style={[styles.helplineName, { color: colors.textPrimary }]}>{h.name}</Text>
+                  <Text style={[styles.helplineNumber, { color: colors.textMuted }]}>{h.number}</Text>
                 </View>
               </View>
-              <View style={styles.callBtn}>
+              <View style={[styles.callBtn, { backgroundColor: colors.primary }]}>
                 <Text style={styles.callBtnText}>CALL</Text>
               </View>
             </TouchableOpacity>
@@ -188,11 +190,11 @@ export default function HomeScreen() {
 
         {/* Recent Alerts teaser */}
         <TouchableOpacity
-          style={styles.historyCard}
+          style={[styles.historyCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
           onPress={() => router.push('/alert-history')}
         >
           <Ionicons name="time-outline" size={20} color={colors.textMuted} />
-          <Text style={styles.historyText}>View Alert History</Text>
+          <Text style={[styles.historyText, { color: colors.textSecondary }]}>View Alert History</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </TouchableOpacity>
       </ScrollView>
@@ -204,7 +206,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   scroll: { flex: 1 },
   container: { paddingBottom: 40 },
   header: {
@@ -216,22 +218,18 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   appName: {
-    color: colors.primary,
     fontSize: fontSize.xxl,
     fontWeight: '900',
     letterSpacing: 1,
   },
   tagline: {
-    color: colors.textMuted,
     fontSize: fontSize.sm,
     marginTop: 2,
   },
   settingsBtn: {
     padding: spacing.sm,
-    backgroundColor: colors.bgCard,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
   },
   statusRow: {
     flexDirection: 'row',
@@ -242,28 +240,24 @@ const styles = StyleSheet.create({
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgCard,
     borderRadius: radius.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: colors.border,
     gap: 5,
   },
   dot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
+  statusText: { fontSize: 11, fontWeight: '600' },
   sosArea: {
     alignItems: 'center',
     paddingVertical: spacing.xl,
   },
   sosHint: {
-    color: colors.textMuted,
     fontSize: fontSize.sm,
     marginTop: spacing.md,
     letterSpacing: 0.5,
   },
   sectionTitle: {
-    color: colors.textMuted,
     fontSize: fontSize.xs,
     fontWeight: '700',
     letterSpacing: 2,
@@ -280,7 +274,6 @@ const styles = StyleSheet.create({
   quickCard: {
     flex: 1,
     minWidth: '44%',
-    backgroundColor: colors.bgCard,
     borderRadius: radius.lg,
     borderWidth: 1,
     padding: spacing.md,
@@ -288,17 +281,14 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   quickLabel: {
-    color: colors.textSecondary,
     fontSize: fontSize.sm,
     fontWeight: '600',
     marginTop: 4,
   },
   helplinesCard: {
     marginHorizontal: spacing.lg,
-    backgroundColor: colors.bgCard,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
   },
   helplineRow: {
@@ -307,21 +297,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   helplineLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   helplineIconBg: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.primaryGlow,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  helplineName: { color: colors.textPrimary, fontSize: fontSize.sm, fontWeight: '600' },
-  helplineNumber: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 1 },
+  helplineName: { fontSize: fontSize.sm, fontWeight: '600' },
+  helplineNumber: { fontSize: fontSize.xs, marginTop: 1 },
   callBtn: {
-    backgroundColor: colors.primary,
     borderRadius: radius.full,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
@@ -333,13 +320,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
-    backgroundColor: colors.bgCard,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
   },
-  historyText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.sm, fontWeight: '600' },
+  historyText: { flex: 1, fontSize: fontSize.sm, fontWeight: '600' },
   intelCards: {
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
@@ -348,10 +333,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.bgCard,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
   },
   intelIconBg: {
@@ -361,6 +344,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  intelLabel: { color: colors.textPrimary, fontSize: fontSize.md, fontWeight: '700' },
-  intelDesc: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 1 },
+  intelLabel: { fontSize: fontSize.md, fontWeight: '700' },
+  intelDesc: { fontSize: fontSize.xs, marginTop: 1 },
 });

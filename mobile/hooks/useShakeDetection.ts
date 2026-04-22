@@ -1,20 +1,17 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { Accelerometer } from 'expo-sensors';
 import { useSOSStore } from '../store/sosStore';
 import { useSettingsStore } from '../store/settingsStore';
 
 // Sensitivity map: 1=very low → 5=very high
-// These are G-force magnitudes. Normal walking ≈ 1.5G, hard shake ≈ 4-6G.
-// Raised all values to prevent false triggers from table vibrations/walking.
-const THRESHOLDS = [6.5, 5.5, 4.5, 3.5, 2.8];
+// Lower values = harder to trigger. Walking ≈ 1.2G, vigorous shake ≈ 3-5G.
+const THRESHOLDS = [5.0, 4.0, 3.0, 2.5, 2.0];
 
-// How many consecutive readings above threshold needed
-// Increased from 3→5 to require sustained shaking, not a single jolt
-const CONSECUTIVE_NEEDED = 5;
+// How many readings above threshold needed within the time window
+const CONSECUTIVE_NEEDED = 3;
 
-// How long (ms) those readings must happen within
-// Tightened from 600→400ms — real panic shake is rapid and intense
-const WINDOW_MS = 400;
+// Time window (ms) — 3 readings at 100ms intervals fits comfortably
+const WINDOW_MS = 800;
 
 // Cooldown after a shake triggers (ms)
 const COOLDOWN_MS = 6000;
@@ -22,25 +19,38 @@ const COOLDOWN_MS = 6000;
 export function useShakeDetection() {
   const subRef = useRef<any>(null);
   const lastShakeRef = useRef<number>(0);
-  const hitTimesRef = useRef<number[]>([]); // timestamps of threshold-exceeding readings
-  const { startCountdown, status } = useSOSStore();
-  const { shakeSensitivity } = useSettingsStore();
+  const hitTimesRef = useRef<number[]>([]);
 
-  const threshold = THRESHOLDS[Math.min(shakeSensitivity - 1, 4)];
+  // Use refs for values that change frequently to avoid effect re-fires
+  const statusRef = useRef(useSOSStore.getState().status);
+  const startCountdownRef = useRef(useSOSStore.getState().startCountdown);
+  const thresholdRef = useRef(THRESHOLDS[2]); // default medium
 
-  const start = useCallback(() => {
-    // 200ms polling → less battery drain than 100ms, still responsive
-    Accelerometer.setUpdateInterval(150);
+  // Sync refs with store changes (no effect re-fire needed)
+  useEffect(() => {
+    const unsub1 = useSOSStore.subscribe((state) => {
+      statusRef.current = state.status;
+      startCountdownRef.current = state.startCountdown;
+    });
+    const unsub2 = useSettingsStore.subscribe((state) => {
+      thresholdRef.current = THRESHOLDS[Math.min(state.shakeSensitivity - 1, 4)];
+    });
+    return () => { unsub1(); unsub2(); };
+  }, []);
+
+  useEffect(() => {
+    // 100ms polling — fast enough to catch 3 readings in 800ms
+    Accelerometer.setUpdateInterval(100);
 
     subRef.current = Accelerometer.addListener(({ x, y, z }) => {
       const magnitude = Math.sqrt(x * x + y * y + z * z);
       const now = Date.now();
 
       // Only check when idle and cooldown has passed
-      if (status !== 'idle') return;
+      if (statusRef.current !== 'idle') return;
       if (now - lastShakeRef.current < COOLDOWN_MS) return;
 
-      if (magnitude > threshold) {
+      if (magnitude > thresholdRef.current) {
         // Record this hit
         hitTimesRef.current.push(now);
 
@@ -49,14 +59,14 @@ export function useShakeDetection() {
           (t) => now - t <= WINDOW_MS
         );
 
-        // Only fire if we've had enough consecutive hits
+        // Fire if we've had enough hits within the window
         if (hitTimesRef.current.length >= CONSECUTIVE_NEEDED) {
           hitTimesRef.current = [];
           lastShakeRef.current = now;
-          startCountdown('shake');
+          startCountdownRef.current('shake');
         }
       } else {
-        // Below threshold — clear the window if too much time has passed
+        // Below threshold — clear if too much time has passed
         if (
           hitTimesRef.current.length > 0 &&
           now - hitTimesRef.current[hitTimesRef.current.length - 1] > WINDOW_MS
@@ -65,18 +75,11 @@ export function useShakeDetection() {
         }
       }
     });
-  }, [threshold, status, startCountdown]);
 
-  const stop = useCallback(() => {
-    subRef.current?.remove();
-    subRef.current = null;
-    hitTimesRef.current = [];
-  }, []);
-
-  useEffect(() => {
-    start();
-    return stop;
-  }, [start, stop]);
-
-  return { start, stop };
+    return () => {
+      subRef.current?.remove();
+      subRef.current = null;
+      hitTimesRef.current = [];
+    };
+  }, []); // Empty deps — refs handle all reactive values
 }

@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
+import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -12,18 +13,23 @@ const TAB_ITEMS: { name: string; label: string; icon: IoniconName; activeIcon: I
   { name: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
+// Android's 3-button nav bar or gesture nav needs extra bottom padding
+const ANDROID_NAV_PADDING = Platform.OS === 'android' ? 20 : 0;
+
 export default function TabLayout() {
+  const { colors } = useAppTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#1a1030',
+          backgroundColor: colors.bgCard,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          paddingBottom: 8,
+          paddingBottom: 8 + ANDROID_NAV_PADDING,
           paddingTop: 6,
-          height: 68,
+          height: 68 + ANDROID_NAV_PADDING,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,

@@ -68,14 +68,24 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const userIdStr = await AsyncStorage.getItem(SESSION_KEY);
       if (userIdStr) {
         const userId = parseInt(userIdStr, 10);
+        if (isNaN(userId) || userId <= 0) {
+          // Invalid stored value — clear it
+          await AsyncStorage.removeItem(SESSION_KEY);
+          set({ isLoading: false });
+          return;
+        }
         const user = await getUserById(userId);
         if (user) {
           set({ currentUser: user, isLoggedIn: true, isLoading: false });
           return;
         }
+        // User doesn't exist in DB (e.g. DB was recreated) — clear stale session
+        await AsyncStorage.removeItem(SESSION_KEY);
       }
     } catch (err) {
       console.error('Auth: Failed to restore session', err);
+      // Clear potentially corrupted session data
+      try { await AsyncStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
     }
     set({ isLoading: false });
   },

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { Accelerometer, Gyroscope } from 'expo-sensors';
 import { useSOSStore } from '../store/sosStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -13,55 +13,63 @@ export function useFallDetection() {
   const freeFallTimeRef = useRef<number>(0);
   const accelSubRef = useRef<any>(null);
   const gyroSubRef = useRef<any>(null);
-  const { startCountdown, status } = useSOSStore();
-  const { fallDetection } = useSettingsStore();
 
-  const checkFall = useCallback(() => {
-    const { x, y, z } = accelRef.current;
-    const magnitude = Math.sqrt(x * x + y * y + z * z);
-    const now = Date.now();
+  // Use refs for reactive values to avoid effect re-fires
+  const statusRef = useRef(useSOSStore.getState().status);
+  const startCountdownRef = useRef(useSOSStore.getState().startCountdown);
+  const fallDetectionRef = useRef(useSettingsStore.getState().fallDetection);
 
-    if (magnitude < FREE_FALL_THRESHOLD) {
-      freeFallTimeRef.current = now;
-    }
+  // Sync refs with store changes
+  useEffect(() => {
+    const unsub1 = useSOSStore.subscribe((state) => {
+      statusRef.current = state.status;
+      startCountdownRef.current = state.startCountdown;
+    });
+    const unsub2 = useSettingsStore.subscribe((state) => {
+      fallDetectionRef.current = state.fallDetection;
+    });
+    return () => { unsub1(); unsub2(); };
+  }, []);
 
-    const timeSinceFall = now - freeFallTimeRef.current;
-    const { x: gx, y: gy, z: gz } = gyroRef.current;
-    const gyroMag = Math.sqrt(gx * gx + gy * gy + gz * gz);
-
-    if (
-      timeSinceFall > 100 &&
-      timeSinceFall < 1500 &&
-      (magnitude > IMPACT_THRESHOLD || gyroMag > GYRO_THRESHOLD) &&
-      status === 'idle'
-    ) {
-      freeFallTimeRef.current = 0;
-      startCountdown('fall');
-    }
-  }, [status, startCountdown]);
-
-  const start = useCallback(() => {
-    if (!fallDetection) return;
-
+  useEffect(() => {
     Accelerometer.setUpdateInterval(50);
     Gyroscope.setUpdateInterval(50);
 
     accelSubRef.current = Accelerometer.addListener((data) => {
       accelRef.current = data;
-      checkFall();
+
+      if (!fallDetectionRef.current) return;
+
+      const { x, y, z } = data;
+      const magnitude = Math.sqrt(x * x + y * y + z * z);
+      const now = Date.now();
+
+      if (magnitude < FREE_FALL_THRESHOLD) {
+        freeFallTimeRef.current = now;
+      }
+
+      const timeSinceFall = now - freeFallTimeRef.current;
+      const { x: gx, y: gy, z: gz } = gyroRef.current;
+      const gyroMag = Math.sqrt(gx * gx + gy * gy + gz * gz);
+
+      if (
+        timeSinceFall > 100 &&
+        timeSinceFall < 1500 &&
+        (magnitude > IMPACT_THRESHOLD || gyroMag > GYRO_THRESHOLD) &&
+        statusRef.current === 'idle'
+      ) {
+        freeFallTimeRef.current = 0;
+        startCountdownRef.current('fall');
+      }
     });
+
     gyroSubRef.current = Gyroscope.addListener((data) => {
       gyroRef.current = data;
     });
-  }, [fallDetection, checkFall]);
 
-  const stop = useCallback(() => {
-    accelSubRef.current?.remove();
-    gyroSubRef.current?.remove();
-  }, []);
-
-  useEffect(() => {
-    start();
-    return stop;
-  }, [start, stop]);
+    return () => {
+      accelSubRef.current?.remove();
+      gyroSubRef.current?.remove();
+    };
+  }, []); // Empty deps — refs handle all reactive values
 }

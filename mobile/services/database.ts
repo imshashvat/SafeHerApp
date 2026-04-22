@@ -68,11 +68,19 @@ export async function initDatabase(): Promise<void> {
       auto_call_guardian INTEGER DEFAULT 1,
       check_in_interval INTEGER DEFAULT 30,
       map_theme TEXT DEFAULT 'light',
+      app_theme TEXT DEFAULT 'dark',
       language TEXT DEFAULT 'en',
       is_onboarded INTEGER DEFAULT 0,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
+
+  // Migration: add app_theme column for existing databases
+  try {
+    await db.runAsync(`ALTER TABLE user_settings ADD COLUMN app_theme TEXT DEFAULT 'dark'`);
+  } catch {
+    // Column already exists — ignore
+  }
 }
 
 function getDb(): SQLite.SQLiteDatabase {
@@ -256,6 +264,7 @@ export interface DbSettings {
   auto_call_guardian: number;  // 0|1
   check_in_interval: number;
   map_theme: string;
+  app_theme: string;
   language: string;
   is_onboarded: number;       // 0|1
 }
@@ -288,6 +297,7 @@ export async function saveUserSettings(
     autoCallGuardian: 'auto_call_guardian',
     checkInInterval: 'check_in_interval',
     mapTheme: 'map_theme',
+    appTheme: 'app_theme',
     language: 'language',
     isOnboarded: 'is_onboarded',
   };

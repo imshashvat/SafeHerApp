@@ -17,6 +17,7 @@ type Settings = {
   autoCallGuardian: boolean;       // auto-call first guardian
   checkInInterval: number;         // minutes
   mapTheme: 'light' | 'dark';
+  appTheme: 'light' | 'dark';     // app-wide UI theme
   language: 'en' | 'hi';
   profileName: string;
   bloodGroup: string;
@@ -43,6 +44,7 @@ const DEFAULTS: Settings = {
   autoCallGuardian: true,
   checkInInterval: 30,
   mapTheme: 'light',
+  appTheme: 'dark',
   language: 'en',
   profileName: '',
   bloodGroup: '',
@@ -84,6 +86,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           autoCallGuardian: !!dbSettings.auto_call_guardian,
           checkInInterval: dbSettings.check_in_interval,
           mapTheme: (dbSettings.map_theme as 'light' | 'dark') || 'light',
+          appTheme: ((dbSettings as any).app_theme as 'light' | 'dark') || 'dark',
           language: (dbSettings.language as 'en' | 'hi') || 'en',
           isOnboarded: !!dbSettings.is_onboarded,
           profileName: user?.name ?? '',
@@ -122,6 +125,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         auto_call_guardian: s.autoCallGuardian ? 1 : 0,
         check_in_interval: s.checkInInterval,
         map_theme: s.mapTheme,
+        app_theme: s.appTheme,
         language: s.language,
         is_onboarded: s.isOnboarded ? 1 : 0,
       });
