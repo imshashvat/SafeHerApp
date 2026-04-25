@@ -1,0 +1,115 @@
+# SafeHer — Auth + Profile Edit + Background SOS
+
+## Summary of Problems
+
+| # | Problem | Root Cause |
+|---|---------|------------|
+| 1 | User is auto-logged in on every launch | `restoreSession()` in `authStore.ts` reads from `AsyncStorage` and sets `isLoggedIn: true` with no user prompt |
+| 2 | No login / signup option visible | Since auto-login fires first, the user never sees `auth/login` or `auth/register` |
+| 3 | Cannot change name / profile | `settings.tsx` shows name but has no edit button; the `authStore.updateProfile()` API exists but is unused in UI |
+| 4 | Background shake + voice SOS not working | Voice detection is **disabled by default** (`voiceKeyword: false`); users don't know how to enable it; no status indicator anywhere |
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Auto-login behavior** — A safety app normally benefits from fast access (no login required after first setup). Should we:
+> - **Option A (selected):** Always show login screen on app start. User enters password each time.
+> - **Option B:** Add a "Remember Me" checkbox that, when checked, skips login next time.
+>
+> The plan below uses **Option A** (always require login on start) since you said you don't want auto-login. Let me know if you want Option B instead.
+
+---
+
+## Proposed Changes
+
+### 1. Auth Store — Disable Auto-Login
+
+#### [MODIFY] [authStore.ts](file:///c:/Users/shash/SafeHerApp/mobile/store/authStore.ts)
+
+- `restoreSession()` currently reads the stored `userId` and calls `getUserById()` → auto-logs in.
+- **Change**: Instead of restoring a full session, only read the stored `phone` (for convenience pre-fill) and immediately set `isLoggedIn: false`. The user always sees the login screen.
+- Add a `savedPhone` field to the store so the login screen can pre-fill it.
+- Keep `logout()` (it already clears storage).
+
+---
+
+### 2. Login Screen — Pre-fill Phone & Remove Auto-Skip
+
+#### [MODIFY] [login.tsx](file:///c:/Users/shash/SafeHerApp/mobile/app/auth/login.tsx)
+
+- Read `savedPhone` from auth store on mount and pre-fill the phone input.
+- The user only needs to type their password.
+- No other UI changes needed (register link already exists).
+
+---
+
+### 3. Settings — Add "Edit Profile" Section
+
+#### [MODIFY] [settings.tsx](file:///c:/Users/shash/SafeHerApp/mobile/app/settings.tsx)
+
+Add a new **👤 PROFILE** section above the logout button, replacing the static user card with an editable version:
+
+- **Name** — text input with pencil icon
+- **Email** — text input
+- **Blood Group** — chip selector (same style as register screen)
+- **Save button** → calls `authStore.updateProfile({ name, email, blood_group })`
+- Show success toast on save
+
+The existing `authStore.updateProfile()` and database `updateUserProfile()` functions already handle saving — we just need the UI.
+
+---
+
+### 4. Background SOS — Enable Voice by Default + Status Card
+
+#### [MODIFY] [settingsStore.ts](file:///c:/Users/shash/SafeHerApp/mobile/store/settingsStore.ts)
+
+- Change default `voiceKeyword: false` → **`voiceKeyword: true`**
+- This activates voice spike-detection from first launch without the user needing to find the toggle
+
+#### [MODIFY] [settings.tsx](file:///c:/Users/shash/SafeHerApp/mobile/app/settings.tsx)
+
+Add a **🛡️ BACKGROUND PROTECTION** status card at the top of Settings (just below the user card) showing live status badges:
+
+```
+🟢 Shake Detection  ACTIVE
+🟢 Voice Detection  ACTIVE   (or 🔴 OFF if disabled)
+🟢 Fall Detection   ACTIVE   (or 🔴 OFF if disabled)
+🟢 Foreground Guard RUNNING  (always shown)
+```
+
+This makes it clear the background detection is working without the user having to dig through settings.
+
+#### [MODIFY] [_layout.tsx](file:///c:/Users/shash/SafeHerApp/mobile/app/_layout.tsx)
+
+- No sensor hook changes needed — `useShakeDetection`, `useVoiceDetection`, `useFallDetection`, `useSOSDispatch` are already mounted globally.
+- Add mic + accelerometer **permission requests** at startup (before the hooks run) so Android doesn't silently deny them.
+
+---
+
+## Files Changed Summary
+
+| File | Change |
+|------|--------|
+| `store/authStore.ts` | `restoreSession` → only saves phone, doesn't auto-login; add `savedPhone` field |
+| `app/auth/login.tsx` | Pre-fill phone from `savedPhone`; no other change |
+| `app/settings.tsx` | Add editable profile section + background protection status card |
+| `store/settingsStore.ts` | Default `voiceKeyword: true` |
+| `app/_layout.tsx` | Add explicit mic/sensor permission requests at startup |
+
+---
+
+## Verification Plan
+
+### Automated
+- Run `npx tsc --noEmit` to check TypeScript validity after changes.
+
+### Manual
+1. Clear app data / fresh install → should see login screen
+2. Login → should go to main tabs
+3. Press back / close app → should see login screen again (no auto-login)
+4. In Settings → tap name → should be editable; save → name updates everywhere
+5. In Settings → verify green badges for Shake, Voice, Fall detection
+6. Shake the device → SOS countdown should trigger
+7. Make a loud sound → SOS countdown should trigger (voice)
