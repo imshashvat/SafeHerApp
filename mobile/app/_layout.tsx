@@ -13,6 +13,7 @@ import { useVoiceDetection } from '../hooks/useVoiceDetection';
 import { useSOSDispatch } from '../hooks/useSOSDispatch';
 import { crimeDataService } from '../services/crimeDataService';
 import { initDatabase } from '../services/database';
+import { Audio } from 'expo-av';
 import { ThemeProvider, useAppTheme } from '../contexts/ThemeContext';
 import {
   startForegroundService,
@@ -34,6 +35,9 @@ function InnerLayout() {
     (async () => {
       await initDatabase();
       await restoreSession();
+      // Request microphone permission up-front so voice detection doesn't
+      // get silently denied when it starts polling later.
+      Audio.requestPermissionsAsync().catch(() => {});
     })();
 
     // Load ML crime data (bundled, no network needed)

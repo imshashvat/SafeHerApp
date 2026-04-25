@@ -1,9 +1,8 @@
 /**
  * Auth Store — Manages user authentication state.
  *
- * Uses expo-sqlite for local auth (no server needed).
- * On login, loads user-specific data into other stores.
- * On logout, clears stores and shows login screen.
+ * Auto-login is DISABLED. The app always shows the login screen on launch.
+ * The saved phone number is stored only for convenience pre-fill.
  */
 
 import { create } from 'zustand';
@@ -16,18 +15,16 @@ import {
   updateUserProfile,
 } from '../services/database';
 
-const SESSION_KEY = '@safeher_session';
+const PHONE_KEY = '@safeher_phone'; // phone pre-fill only — NOT used for auto-login
 
 type AuthStore = {
   currentUser: DbUser | null;
   isLoggedIn: boolean;
   isLoading: boolean;
   error: string;
+  savedPhone: string; // pre-fills the login screen
 
-  /** Try to restore session from persisted userId */
   restoreSession: () => Promise<void>;
-
-  /** Register a new user */
   register: (
     name: string,
     phone: string,
@@ -35,25 +32,14 @@ type AuthStore = {
     email?: string,
     bloodGroup?: string
   ) => Promise<{ success: boolean; error?: string }>;
-
-  /** Login with phone + password */
-  login: (
-    phone: string,
-    password: string
-  ) => Promise<{ success: boolean; error?: string }>;
-
-  /** Logout and clear session */
+  login: (phone: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-
-  /** Update profile fields on current user */
   updateProfile: (updates: {
     name?: string;
     email?: string;
     blood_group?: string;
     medical_notes?: string;
   }) => Promise<void>;
-
-  /** Clear error */
   clearError: () => void;
 };
 
@@ -62,32 +48,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   isLoggedIn: false,
   isLoading: true,
   error: '',
+  savedPhone: '',
 
   restoreSession: async () => {
     try {
-      const userIdStr = await AsyncStorage.getItem(SESSION_KEY);
-      if (userIdStr) {
-        const userId = parseInt(userIdStr, 10);
-        if (isNaN(userId) || userId <= 0) {
-          // Invalid stored value — clear it
-          await AsyncStorage.removeItem(SESSION_KEY);
-          set({ isLoading: false });
-          return;
-        }
-        const user = await getUserById(userId);
-        if (user) {
-          set({ currentUser: user, isLoggedIn: true, isLoading: false });
-          return;
-        }
-        // User doesn't exist in DB (e.g. DB was recreated) — clear stale session
-        await AsyncStorage.removeItem(SESSION_KEY);
-      }
-    } catch (err) {
-      console.error('Auth: Failed to restore session', err);
-      // Clear potentially corrupted session data
-      try { await AsyncStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
-    }
-    set({ isLoading: false });
+      // Load saved phone for login screen pre-fill only — never auto-login
+      const phone = await AsyncStorage.getItem(PHONE_KEY);
+      if (phone) set({ savedPhone: phone });
+    } catch { /* ignore */ }
+    // Always require a fresh login
+    set({ isLoading: false, isLoggedIn: false });
   },
 
   register: async (name, phone, password, email = '', bloodGroup = '') => {
@@ -108,8 +78,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         return { success: false, error: 'Phone number already registered' };
       }
 
-      await AsyncStorage.setItem(SESSION_KEY, user.id.toString());
-      set({ currentUser: user, isLoggedIn: true, isLoading: false, error: '' });
+      await AsyncStorage.setItem(PHONE_KEY, phone);
+      set({ currentUser: user, isLoggedIn: true, isLoading: false, error: '', savedPhone: phone });
       return { success: true };
     } catch (err: any) {
       const msg = err.message || 'Registration failed';
@@ -132,8 +102,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         return { success: false, error: 'Invalid phone number or password' };
       }
 
-      await AsyncStorage.setItem(SESSION_KEY, user.id.toString());
-      set({ currentUser: user, isLoggedIn: true, isLoading: false, error: '' });
+      // Save phone for convenience pre-fill only (NOT for auto-login)
+      await AsyncStorage.setItem(PHONE_KEY, phone);
+      set({ currentUser: user, isLoggedIn: true, isLoading: false, error: '', savedPhone: phone });
       return { success: true };
     } catch (err: any) {
       const msg = err.message || 'Login failed';
@@ -143,14 +114,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   logout: async () => {
-    await AsyncStorage.removeItem(SESSION_KEY);
+    // Keep savedPhone so login screen still pre-fills the number
     set({ currentUser: null, isLoggedIn: false, error: '' });
   },
 
   updateProfile: async (updates) => {
     const { currentUser } = get();
     if (!currentUser) return;
-
     await updateUserProfile(currentUser.id, updates);
     const refreshed = await getUserById(currentUser.id);
     if (refreshed) set({ currentUser: refreshed });

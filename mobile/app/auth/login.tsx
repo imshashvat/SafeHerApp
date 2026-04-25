@@ -11,8 +11,8 @@ import { colors, fontSize, spacing, radius } from '../../constants/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, error, isLoading, clearError } = useAuthStore();
-  const [phone, setPhone] = useState('');
+  const { login, error, isLoading, clearError, savedPhone } = useAuthStore();
+  const [phone, setPhone] = useState(savedPhone);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 

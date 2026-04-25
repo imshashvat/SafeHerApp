@@ -7,10 +7,13 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0f0a1e"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.safeher.mobile",
@@ -30,6 +33,7 @@
         "backgroundColor": "#0f0a1e"
       },
       "package": "com.safeher.mobile",
+      "versionCode": 1,
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -74,6 +78,13 @@
     "experiments": {
       "typedRoutes": true
     },
-    "scheme": "safeher"
+    "scheme": "safeher",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b7e476bd-25e5-46dd-950c-33c634eb24b1"
+      }
+    },
+    "owner": "eternal18"
   }
 }

@@ -36,7 +36,7 @@ type SettingsStore = Settings & {
 const DEFAULTS: Settings = {
   shakeSensitivity: 3,
   fallDetection: true,
-  voiceKeyword: false,
+  voiceKeyword: true,
   autoVideoRecord: true,
   smsAlerts: true,
   emailAlerts: true,
