@@ -9,6 +9,7 @@
 
 import { Platform, Linking } from 'react-native';
 import * as Location from 'expo-location';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { useGuardianStore }    from '../store/guardianStore';
 import { useSOSStore }         from '../store/sosStore';
 import { useSettingsStore }    from '../store/settingsStore';
@@ -63,36 +64,37 @@ function buildEmailBody(lat: number, lng: number, name: string, trigger: string)
   );
 }
 
-// ─── SMS via Fast2SMS (India) — silent, no SMS app opened ────────────────────
+// ─── SMS via Fast2SMS — strip to 10-digit Indian number ──────────────────────
+
+function normalizeIndianNumber(phone: string): string {
+  // Remove spaces, dashes, brackets
+  let n = phone.replace(/[\s\-().]/g, '');
+  // Strip +91 or 0091 country code
+  if (n.startsWith('+91')) n = n.slice(3);
+  if (n.startsWith('0091')) n = n.slice(4);
+  // Strip leading 0
+  if (n.startsWith('0') && n.length === 11) n = n.slice(1);
+  return n; // return 10-digit number
+}
 
 async function sendSMSSilent(phones: string[], message: string): Promise<boolean> {
-  if (!FAST2SMS_KEY) {
-    console.warn('Fast2SMS key not set — SMS not sent');
-    return false;
-  }
+  if (!FAST2SMS_KEY) { console.warn('Fast2SMS key not set'); return false; }
   try {
-    const numbers = phones.join(',');
+    const numbers = phones.map(normalizeIndianNumber).filter(n => n.length === 10).join(',');
+    if (!numbers) return false;
     const res = await fetchWithTimeout(
       'https://www.fast2sms.com/dev/bulkV2',
       {
         method: 'POST',
-        headers: {
-          authorization: FAST2SMS_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          route:    'q',
-          message,
-          numbers,
-          flash:    0,
-        }),
+        headers: { authorization: FAST2SMS_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route: 'q', message, numbers, flash: 0 }),
       },
       10000
     );
     const json = await res.json() as Record<string, unknown>;
     return json?.['return'] === true;
   } catch (err) {
-    console.error('SMS send failed:', err);
+    console.error('SMS failed:', err);
     return false;
   }
 }
@@ -139,14 +141,29 @@ async function sendEmailSilent(
   return allOk;
 }
 
-// ─── Direct call — Android with CALL_PHONE permission auto-dials ──────────────
+// ─── Direct call via ACTION_CALL — no Phone app opened ───────────────────────
+// Uses expo-intent-launcher on Android: initiates call directly (CALL_PHONE permission required)
+// Shows system call overlay only, SafeHer stays in background
 
 export async function makeDirectCall(number: string): Promise<void> {
-  const clean  = number.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
-  const telUrl = `tel:${clean}`;
+  const clean = number.replace(/[\s\-().]/g, '').replace(/[^0-9+]/g, '');
+
+  if (Platform.OS === 'android') {
+    try {
+      // ACTION_CALL: starts call immediately without opening Phone dialer app
+      await IntentLauncher.startActivityAsync('android.intent.action.CALL', {
+        data: `tel:${clean}`,
+      });
+      return;
+    } catch {
+      // Fall back to Linking if intent fails
+    }
+  }
+
+  // iOS fallback
   try {
-    const canOpen = await Linking.canOpenURL(telUrl);
-    if (canOpen) await Linking.openURL(telUrl);
+    const canOpen = await Linking.canOpenURL(`tel:${clean}`);
+    if (canOpen) await Linking.openURL(`tel:${clean}`);
   } catch { /* ignore */ }
 }
 
