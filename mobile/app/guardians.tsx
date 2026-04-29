@@ -19,6 +19,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 type RelationType = 'Mother' | 'Father' | 'Sister' | 'Brother' | 'Friend' | 'Partner' | 'Other';
 const RELATIONS: RelationType[] = ['Mother', 'Father', 'Sister', 'Brother', 'Friend', 'Partner', 'Other'];
 
+
 function AddGuardianForm({ onAdd, colors }: { onAdd: () => void; colors: any }) {
   const { addGuardian, guardians } = useGuardianStore();
   const [name, setName] = useState('');
@@ -64,7 +65,53 @@ function AddGuardianForm({ onAdd, colors }: { onAdd: () => void; colors: any }) 
 }
 
 function GuardianCard({ guardian, colors }: { guardian: Guardian; colors: any }) {
-  const { removeGuardian } = useGuardianStore();
+  const { removeGuardian, updateGuardian } = useGuardianStore();
+  const [editing, setEditing] = useState(false);
+  const [eName,     setEName]     = useState(guardian.name);
+  const [ePhone,    setEPhone]    = useState(guardian.phone);
+  const [eEmail,    setEEmail]    = useState(guardian.email ?? '');
+  const [eRelation, setERelation] = useState<RelationType>((guardian.relation as RelationType) ?? 'Friend');
+
+  const saveEdit = async () => {
+    if (!eName.trim() || !ePhone.trim()) {
+      Alert.alert('Required', 'Name and phone are required.');
+      return;
+    }
+    await updateGuardian(guardian.id, {
+      name: eName.trim(), phone: ePhone.trim(),
+      email: eEmail.trim(), relation: eRelation,
+    });
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.primary }]}>
+        <Text style={[styles.cardName, { color: colors.primary, marginBottom: 8 }]}>Edit Guardian</Text>
+        <TextInput style={[styles.editInput, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]} value={eName}  onChangeText={setEName}  placeholder="Name *"  placeholderTextColor={colors.textMuted} />
+        <TextInput style={[styles.editInput, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]} value={ePhone} onChangeText={setEPhone} placeholder="Phone *" placeholderTextColor={colors.textMuted} keyboardType="phone-pad" />
+        <TextInput style={[styles.editInput, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]} value={eEmail} onChangeText={setEEmail} placeholder="Email" placeholderTextColor={colors.textMuted} keyboardType="email-address" autoCapitalize="none" />
+        <View style={styles.relations}>
+          {RELATIONS.map(r => (
+            <TouchableOpacity key={r} style={[styles.relationChip, { backgroundColor: colors.bgElevated, borderColor: colors.border }, eRelation === r && { backgroundColor: colors.primaryGlow, borderColor: colors.primary }]} onPress={() => setERelation(r)}>
+              <Text style={[styles.relationText, { color: colors.textMuted }, eRelation === r && { color: colors.primary }]}>{r}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <TouchableOpacity style={[styles.iconBtn, { flex: 1, backgroundColor: colors.bgElevated, borderColor: colors.border }]} onPress={() => setEditing(false)}>
+            <Ionicons name="close" size={18} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600' }}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.iconBtn, { flex: 2, backgroundColor: colors.primary, borderColor: colors.primary }]} onPress={saveEdit}>
+            <Ionicons name="checkmark" size={18} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Save Changes</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
       <View style={[styles.cardAvatar, { backgroundColor: colors.accent }]}>
@@ -72,10 +119,13 @@ function GuardianCard({ guardian, colors }: { guardian: Guardian; colors: any })
       </View>
       <View style={styles.cardInfo}>
         <Text style={[styles.cardName, { color: colors.textPrimary }]}>{guardian.name}</Text>
-        <Text style={[styles.cardSub, { color: colors.textMuted }]}>{guardian.relation} · {guardian.phone}</Text>
+        <Text style={[styles.cardSub,  { color: colors.textMuted }]}>{guardian.relation} · {guardian.phone}</Text>
         {guardian.email ? <Text style={[styles.cardEmail, { color: colors.textMuted }]}>{guardian.email}</Text> : null}
       </View>
       <View style={styles.cardActions}>
+        <TouchableOpacity onPress={() => setEditing(true)} style={[styles.iconBtn, { backgroundColor: colors.bgElevated, borderColor: colors.border }]}>
+          <Ionicons name="create-outline" size={20} color={colors.primary} />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => quickCall(guardian.phone)} style={[styles.iconBtn, { backgroundColor: colors.bgElevated, borderColor: colors.border }]}>
           <Ionicons name="call" size={20} color={colors.success} />
         </TouchableOpacity>
@@ -155,7 +205,8 @@ const styles = StyleSheet.create({
   cardSub: { fontSize: fontSize.sm, marginTop: 2 },
   cardEmail: { fontSize: fontSize.xs, marginTop: 1 },
   cardActions: { flexDirection: 'row', gap: spacing.xs },
-  iconBtn: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1 },
+  iconBtn: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  editInput: { borderRadius: radius.md, borderWidth: 1, fontSize: fontSize.md, padding: spacing.sm, marginBottom: spacing.xs },
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { fontSize: fontSize.xl, fontWeight: '700', marginTop: spacing.lg },
   emptySubText: { fontSize: fontSize.sm, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },

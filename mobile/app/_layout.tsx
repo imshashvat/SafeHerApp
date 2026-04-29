@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, View, ActivityIndicator, Text, Platform } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useGuardianStore } from '../store/guardianStore';
@@ -44,6 +45,13 @@ function InnerLayout() {
   // Initialize database and restore session
   useEffect(() => {
     (async () => {
+      // Hide Android system nav bar (Back/Home/Recent) — immersive sticky mode
+      if (Platform.OS === 'android') {
+        try {
+          await NavigationBar.setVisibilityAsync('hidden');
+          await NavigationBar.setBehaviorAsync('overlay-swipe');
+        } catch { /* ignore if not available yet */ }
+      }
       await initDatabase();
       await restoreSession();
 
