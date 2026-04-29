@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -32,6 +32,14 @@ function InnerLayout() {
   const { appTheme, colors } = useAppTheme();
   const { startBackgroundWatch, stopBackgroundWatch } = useLocation();
   const locationWatchStarted = useRef(false);
+  const router = useRouter();
+
+  // Navigate to login whenever session ends (logout or expired)
+  useEffect(() => {
+    if (!authLoading && !isLoggedIn) {
+      router.replace('/auth/login');
+    }
+  }, [isLoggedIn, authLoading]);
 
   // Initialize database and restore session
   useEffect(() => {
