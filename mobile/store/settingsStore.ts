@@ -85,7 +85,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           autoCallGuardian: !!dbSettings.auto_call_guardian,
           checkInInterval: dbSettings.check_in_interval,
           mapTheme: (dbSettings.map_theme as 'light' | 'dark') || 'light',
-          appTheme: ((dbSettings as any).app_theme as 'light' | 'dark') || 'dark',
+          appTheme: ((dbSettings as any).app_theme as 'light' | 'dark') || 'light',
           language: (dbSettings.language as 'en' | 'hi') || 'en',
           isOnboarded: !!dbSettings.is_onboarded,
           profileName: user?.name ?? '',
