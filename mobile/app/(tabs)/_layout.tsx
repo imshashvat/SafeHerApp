@@ -10,6 +10,7 @@ const TAB_ITEMS: { name: string; label: string; icon: IoniconName; activeIcon: I
   { name: 'map', label: 'Safe Map', icon: 'map-outline', activeIcon: 'map' },
   { name: 'checkin', label: 'Check-in', icon: 'time-outline', activeIcon: 'time' },
   { name: 'community', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
+  { name: 'travel-partner', label: 'Travel', icon: 'airplane-outline', activeIcon: 'airplane' },
   { name: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 

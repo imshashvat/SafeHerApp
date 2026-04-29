@@ -13,12 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useGuardianStore, Guardian } from '../store/guardianStore';
 import { quickCall } from '../services/alertService';
-import { colors, fontSize, spacing, radius } from '../constants/theme';
+import { fontSize, spacing, radius } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 type RelationType = 'Mother' | 'Father' | 'Sister' | 'Brother' | 'Friend' | 'Partner' | 'Other';
 const RELATIONS: RelationType[] = ['Mother', 'Father', 'Sister', 'Brother', 'Friend', 'Partner', 'Other'];
 
-function AddGuardianForm({ onAdd }: { onAdd: () => void }) {
+function AddGuardianForm({ onAdd, colors }: { onAdd: () => void; colors: any }) {
   const { addGuardian, guardians } = useGuardianStore();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -42,47 +43,19 @@ function AddGuardianForm({ onAdd }: { onAdd: () => void }) {
   };
 
   return (
-    <View style={styles.form}>
-      <Text style={styles.formTitle}>Add Guardian</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Full Name *"
-        placeholderTextColor={colors.textMuted}
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Phone Number *"
-        placeholderTextColor={colors.textMuted}
-        value={phone}
-        onChangeText={setPhone}
-        keyboardType="phone-pad"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Email (for email alerts)"
-        placeholderTextColor={colors.textMuted}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      {/* Relation picker */}
+    <View style={[styles.form, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+      <Text style={[styles.formTitle, { color: colors.textPrimary }]}>Add Guardian</Text>
+      <TextInput style={[styles.input, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]} placeholder="Full Name *" placeholderTextColor={colors.textMuted} value={name} onChangeText={setName} />
+      <TextInput style={[styles.input, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]} placeholder="Phone Number *" placeholderTextColor={colors.textMuted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      <TextInput style={[styles.input, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]} placeholder="Email (for email alerts)" placeholderTextColor={colors.textMuted} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
       <View style={styles.relations}>
         {RELATIONS.map((r) => (
-          <TouchableOpacity
-            key={r}
-            style={[styles.relationChip, relation === r && styles.relationChipActive]}
-            onPress={() => setRelation(r)}
-          >
-            <Text style={[styles.relationText, relation === r && styles.relationTextActive]}>
-              {r}
-            </Text>
+          <TouchableOpacity key={r} style={[styles.relationChip, { backgroundColor: colors.bgElevated, borderColor: colors.border }, relation === r && { backgroundColor: colors.primaryGlow, borderColor: colors.primary }]} onPress={() => setRelation(r)}>
+            <Text style={[styles.relationText, { color: colors.textMuted }, relation === r && { color: colors.primary }]}>{r}</Text>
           </TouchableOpacity>
         ))}
       </View>
-      <TouchableOpacity style={styles.addBtn} onPress={handleAdd} activeOpacity={0.8}>
+      <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.primary }]} onPress={handleAdd} activeOpacity={0.8}>
         <Ionicons name="person-add" size={18} color="#fff" />
         <Text style={styles.addBtnText}>Add Guardian</Text>
       </TouchableOpacity>
@@ -90,29 +63,23 @@ function AddGuardianForm({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function GuardianCard({ guardian }: { guardian: Guardian }) {
+function GuardianCard({ guardian, colors }: { guardian: Guardian; colors: any }) {
   const { removeGuardian } = useGuardianStore();
   return (
-    <View style={styles.card}>
-      <View style={styles.cardAvatar}>
+    <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+      <View style={[styles.cardAvatar, { backgroundColor: colors.accent }]}>
         <Text style={styles.cardAvatarText}>{guardian.name.charAt(0).toUpperCase()}</Text>
       </View>
       <View style={styles.cardInfo}>
-        <Text style={styles.cardName}>{guardian.name}</Text>
-        <Text style={styles.cardSub}>{guardian.relation} · {guardian.phone}</Text>
-        {guardian.email ? <Text style={styles.cardEmail}>{guardian.email}</Text> : null}
+        <Text style={[styles.cardName, { color: colors.textPrimary }]}>{guardian.name}</Text>
+        <Text style={[styles.cardSub, { color: colors.textMuted }]}>{guardian.relation} · {guardian.phone}</Text>
+        {guardian.email ? <Text style={[styles.cardEmail, { color: colors.textMuted }]}>{guardian.email}</Text> : null}
       </View>
       <View style={styles.cardActions}>
-        <TouchableOpacity onPress={() => quickCall(guardian.phone)} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => quickCall(guardian.phone)} style={[styles.iconBtn, { backgroundColor: colors.bgElevated, borderColor: colors.border }]}>
           <Ionicons name="call" size={20} color={colors.success} />
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => Alert.alert('Remove', `Remove ${guardian.name}?`, [
-            { text: 'Cancel' },
-            { text: 'Remove', style: 'destructive', onPress: () => removeGuardian(guardian.id) },
-          ])}
-          style={styles.iconBtn}
-        >
+        <TouchableOpacity onPress={() => Alert.alert('Remove', `Remove ${guardian.name}?`, [{ text: 'Cancel' }, { text: 'Remove', style: 'destructive', onPress: () => removeGuardian(guardian.id) }])} style={[styles.iconBtn, { backgroundColor: colors.bgElevated, borderColor: colors.border }]}>
           <Ionicons name="trash-outline" size={20} color={colors.danger} />
         </TouchableOpacity>
       </View>
@@ -123,42 +90,40 @@ function GuardianCard({ guardian }: { guardian: Guardian }) {
 export default function GuardiansScreen() {
   const router = useRouter();
   const { guardians } = useGuardianStore();
+  const { colors } = useAppTheme();
   const [showForm, setShowForm] = useState(false);
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>My Guardians</Text>
-        <TouchableOpacity onPress={() => setShowForm(!showForm)} style={styles.plusBtn}>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>My Guardians</Text>
+        <TouchableOpacity onPress={() => setShowForm(!showForm)} style={[styles.plusBtn, { backgroundColor: colors.primary }]}>
           <Ionicons name={showForm ? 'close' : 'add'} size={24} color="#fff" />
         </TouchableOpacity>
       </View>
-
       <FlatList
         data={guardians}
         keyExtractor={(g) => g.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <>
-            {showForm && <AddGuardianForm onAdd={() => setShowForm(false)} />}
+            {showForm && <AddGuardianForm onAdd={() => setShowForm(false)} colors={colors} />}
             {guardians.length === 0 && !showForm && (
               <View style={styles.empty}>
                 <Ionicons name="people-outline" size={64} color={colors.textMuted} />
-                <Text style={styles.emptyText}>No guardians added yet</Text>
-                <Text style={styles.emptySubText}>
-                  Add emergency contacts who will receive SOS alerts
-                </Text>
-                <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowForm(true)}>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No guardians added yet</Text>
+                <Text style={[styles.emptySubText, { color: colors.textMuted }]}>Add emergency contacts who will receive SOS alerts</Text>
+                <TouchableOpacity style={[styles.emptyBtn, { backgroundColor: colors.primary }]} onPress={() => setShowForm(true)}>
                   <Text style={styles.emptyBtnText}>Add First Guardian</Text>
                 </TouchableOpacity>
               </View>
             )}
           </>
         }
-        renderItem={({ item }) => <GuardianCard guardian={item} />}
+        renderItem={({ item }) => <GuardianCard guardian={item} colors={colors} />}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
       />
     </SafeAreaView>
@@ -166,112 +131,34 @@ export default function GuardiansScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
+  safe: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1 },
   backBtn: { marginRight: spacing.sm, padding: 4 },
-  title: { flex: 1, color: colors.textPrimary, fontSize: fontSize.xl, fontWeight: '700' },
-  plusBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.full,
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  title: { flex: 1, fontSize: fontSize.xl, fontWeight: '700' },
+  plusBtn: { borderRadius: radius.full, width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   list: { padding: spacing.lg, paddingBottom: 60 },
-  form: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.lg,
-  },
-  formTitle: {
-    color: colors.textPrimary,
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    marginBottom: spacing.md,
-  },
-  input: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    color: colors.textPrimary,
-    fontSize: fontSize.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
+  form: { borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, marginBottom: spacing.lg },
+  formTitle: { fontSize: fontSize.lg, fontWeight: '700', marginBottom: spacing.md },
+  input: { borderRadius: radius.md, borderWidth: 1, fontSize: fontSize.md, padding: spacing.md, marginBottom: spacing.sm },
   relations: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
-  relationChip: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.bgElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  relationChipActive: { backgroundColor: colors.primaryGlow, borderColor: colors.primary },
-  relationText: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '600' },
-  relationTextActive: { color: colors.primary },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: spacing.md,
-  },
+  relationChip: { paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1 },
+  relationChipActive: {},
+  relationText: { fontSize: fontSize.xs, fontWeight: '600' },
+  relationTextActive: {},
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md },
   addBtnText: { color: '#fff', fontSize: fontSize.md, fontWeight: '700' },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  cardAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  card: { flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, borderWidth: 1, padding: spacing.md, gap: spacing.md },
+  cardAvatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   cardAvatarText: { color: '#fff', fontSize: fontSize.xl, fontWeight: '800' },
   cardInfo: { flex: 1 },
-  cardName: { color: colors.textPrimary, fontSize: fontSize.md, fontWeight: '700' },
-  cardSub: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
-  cardEmail: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 1 },
+  cardName: { fontSize: fontSize.md, fontWeight: '700' },
+  cardSub: { fontSize: fontSize.sm, marginTop: 2 },
+  cardEmail: { fontSize: fontSize.xs, marginTop: 1 },
   cardActions: { flexDirection: 'row', gap: spacing.xs },
-  iconBtn: {
-    padding: spacing.sm,
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
+  iconBtn: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1 },
   empty: { alignItems: 'center', paddingVertical: 60 },
-  emptyText: { color: colors.textSecondary, fontSize: fontSize.xl, fontWeight: '700', marginTop: spacing.lg },
-  emptySubText: { color: colors.textMuted, fontSize: fontSize.sm, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
-  emptyBtn: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.primary,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-  },
+  emptyText: { fontSize: fontSize.xl, fontWeight: '700', marginTop: spacing.lg },
+  emptySubText: { fontSize: fontSize.sm, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
+  emptyBtn: { marginTop: spacing.xl, borderRadius: radius.full, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.md },
 });

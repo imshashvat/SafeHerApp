@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
   TouchableOpacity, TextInput, ActivityIndicator, Alert,
@@ -6,7 +6,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
-import { colors, fontSize, spacing, radius } from '../constants/theme';
+import { fontSize, spacing, radius, type ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { crimeDataService } from '../services/crimeDataService';
 import { useSettingsStore } from '../store/settingsStore';
 import LeafletMapView, { LeafletPolyline, LeafletMarker } from '../components/LeafletMapView';
@@ -110,6 +111,8 @@ function formatDuration(s: number) {
 
 export default function RouteSafetyScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { mapTheme } = useSettingsStore();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -463,7 +466,8 @@ export default function RouteSafetyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -540,4 +544,5 @@ const styles = StyleSheet.create({
   },
   tipsTitle: { color: colors.accent, fontSize: fontSize.xs, fontWeight: '800', letterSpacing: 1 },
   tipText: { color: colors.textSecondary, fontSize: fontSize.xs, lineHeight: 18 },
-});
+  });
+}

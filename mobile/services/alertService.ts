@@ -1,19 +1,17 @@
 /**
- * Alert Service — dispatches SOS alerts silently.
+ * alertService.ts — dispatches SOS alerts silently.
  *
  * Delivery pipeline (all happen without opening any external app):
- *  1. Backend SMS  → POST /api/sos/sms  (Fast2SMS silent delivery — no app switch)
- *  2. Backend email → POST /api/sos/email (SMTP silent delivery — no app switch)
- *  3. Direct call  → react-native-send-intent makeCall() (auto-dials on Android)
- *     On iOS: falls back to tel: scheme (opens Phone app — iOS restriction)
+ *  1. Backend SMS  → POST /api/sos/sms  (Fast2SMS silent delivery)
+ *  2. Backend email → POST /api/sos/email (SMTP silent delivery)
+ *  3. Direct call  → tel: URL scheme (most reliable across Expo builds)
  *
- * Offline fallback for SMS:
- *  If the backend is unreachable, falls back to expo-sms (pre-filled composer).
- *  This is unavoidable at OS level without being the default SMS app.
+ * SOS Live Location: If location is null at dispatch time, does an emergency
+ * 5-second GPS fetch before sending alerts.
  */
 
-import { Platform } from 'react-native';
-import * as Linking from 'expo-linking';
+import { Platform, Linking } from 'react-native';
+import * as Location from 'expo-location';
 import { useGuardianStore } from '../store/guardianStore';
 import { useSOSStore } from '../store/sosStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -23,7 +21,6 @@ import { SOS_NUMBER } from '../constants/helplines';
 // Try to import react-native-send-intent (Android only)
 let SendIntentAndroid: any = null;
 try {
-  // This module only works on Android native builds
   SendIntentAndroid = require('react-native-send-intent').default;
 } catch {
   // Not available in Expo Go — will fall back to Linking
@@ -39,17 +36,15 @@ const TRIGGER_MAP: Record<string, TriggerType> = {
 };
 
 // Backend base URL — update to your machine's WiFi IP
-// Run: ipconfig → look for Wi-Fi IPv4 Address
 const BACKEND_URL = 'http://192.168.1.54:5000/api';
 
-// Timeout helper — React Native's fetch doesn't share the DOM AbortSignal type
+// Timeout helper
 const fetchWithTimeout = (url: string, options: RequestInit, ms = 8000): Promise<Response> => {
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error('timeout')), ms)
   );
   return Promise.race([fetch(url, options), timeout]);
 };
-
 
 function buildMessage(
   lat: number,
@@ -74,12 +69,9 @@ function buildMessage(
   );
 }
 
-// ─── Silent SMS via backend (Fast2SMS) ───────────────────────────────────────
+// ─── Silent SMS via backend ───────────────────────────────────────────────────
 
-async function sendSMSViaBackend(
-  phones: string[],
-  message: string
-): Promise<boolean> {
+async function sendSMSViaBackend(phones: string[], message: string): Promise<boolean> {
   try {
     const res = await fetchWithTimeout(
       `${BACKEND_URL}/sos/sms`,
@@ -96,18 +88,15 @@ async function sendSMSViaBackend(
   }
 }
 
-// SMS fallback intentionally removed — user requires no external app to open.
-// If backend is offline, SOS email is still sent. Add WiFi/data for full SMS support.
+// ─── Direct call — most reliable method ──────────────────────────────────────
 
-// ─── Direct call (no Phone app UI on Android) ─────────────────────────────────
+export async function makeDirectCall(number: string): Promise<void> {
+  const cleanNumber = number.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+  const telUrl = `tel:${cleanNumber}`;
 
-async function makeDirectCall(number: string): Promise<void> {
-  const cleanNumber = number.replace(/\s+/g, '');
-
+  // Try SendIntentAndroid first (auto-dials without pressing Call button)
   if (Platform.OS === 'android' && SendIntentAndroid) {
     try {
-      // makeCall() on Android uses CallIntent which auto-dials without requiring
-      // the user to press the green "Call" button on the dialer screen
       SendIntentAndroid.makeCall(cleanNumber);
       return;
     } catch {
@@ -115,21 +104,53 @@ async function makeDirectCall(number: string): Promise<void> {
     }
   }
 
-  // iOS / fallback: opens native phone app — unavoidable without VoIP SDK
+  // Universal fallback: tel: URL — works on all platforms, opens phone dialer
   try {
-    const url = `tel:${cleanNumber}`;
-    const canOpen = await Linking.canOpenURL(url);
-    if (canOpen) await Linking.openURL(url);
-  } catch { /* Silently ignore */ }
+    const canOpen = await Linking.canOpenURL(telUrl);
+    if (canOpen) {
+      await Linking.openURL(telUrl);
+    }
+  } catch {
+    // Silently ignore
+  }
+}
+
+// ─── Emergency GPS fetch (fallback when location not yet available) ───────────
+
+async function fetchEmergencyLocation(): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return null;
+
+    const loc = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]);
+
+    if (!loc) return null;
+    return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+  } catch {
+    return null;
+  }
 }
 
 // ─── Main dispatch ────────────────────────────────────────────────────────────
 
 export async function dispatchSOS() {
   const { guardians } = useGuardianStore.getState();
-  const { location, trigger } = useSOSStore.getState();
+  let { location } = useSOSStore.getState();
+  const { trigger } = useSOSStore.getState();
   const { smsAlerts, emailAlerts, autoCallOnSOS, autoCallGuardian, profileName } =
     useSettingsStore.getState();
+
+  // ── Emergency GPS fallback if location not yet available ──────────────────
+  if (!location || (location.latitude === 0 && location.longitude === 0)) {
+    const emergencyLoc = await fetchEmergencyLocation();
+    if (emergencyLoc) {
+      useSOSStore.getState().setLocation(emergencyLoc);
+      location = emergencyLoc;
+    }
+  }
 
   const lat = location?.latitude ?? 0;
   const lng = location?.longitude ?? 0;
@@ -142,17 +163,15 @@ export async function dispatchSOS() {
   const emails = guardians.map((g) => g.email).filter(Boolean);
   const dispatchErrors: string[] = [];
 
-  // ── 1. Silent SMS via backend (no app switching) ──────────────────────────
+  // ── 1. Silent SMS via backend ─────────────────────────────────────────────
   if (smsAlerts && phones.length > 0) {
     const backendOk = await sendSMSViaBackend(phones, message);
     if (!backendOk) {
-      // Backend unreachable — log but do NOT open SMS app (user's requirement)
       dispatchErrors.push('sms-backend-offline');
-      console.warn('[SafeHer] SMS backend offline. Check backend is running on 192.168.1.54:5000');
     }
   }
 
-  // ── 2. Silent email via backend (SMTP — no UI at all) ─────────────────────
+  // ── 2. Silent email via backend ───────────────────────────────────────────
   if (emailAlerts && emails.length > 0) {
     try {
       await fetchWithTimeout(
@@ -175,7 +194,7 @@ export async function dispatchSOS() {
     }
   }
 
-  // ── 3. Auto-call emergency number (112) directly ──────────────────────────
+  // ── 3. Auto-call emergency number (112) ───────────────────────────────────
   let callMade = false;
   if (autoCallOnSOS) {
     try {
@@ -187,9 +206,13 @@ export async function dispatchSOS() {
   }
 
   // ── 4. Auto-call first priority guardian ─────────────────────────────────
-  if (autoCallGuardian && guardians.length > 0 && !autoCallOnSOS) {
+  if (autoCallGuardian && guardians.length > 0) {
     const sorted = [...guardians].sort((a, b) => a.priority - b.priority);
     try {
+      // Small delay so 112 call has time to connect before guardian call
+      if (autoCallOnSOS) {
+        await new Promise(r => setTimeout(r, 3000));
+      }
       await makeDirectCall(sorted[0].phone);
       callMade = true;
     } catch {

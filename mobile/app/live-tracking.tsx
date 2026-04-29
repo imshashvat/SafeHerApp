@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity,
-  SafeAreaView, Share, Linking as RNLinking, Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import LeafletMapView from '../components/LeafletMapView';
-import { colors, fontSize, spacing, radius } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { fontSize, spacing, radius } from '../constants/theme';
 import { crimeDataService } from '../services/crimeDataService';
 
 export default function LiveTrackingScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
   const [tracking, setTracking] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,23 +21,18 @@ export default function LiveTrackingScreen() {
     setLoading(true);
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') { setLoading(false); return; }
-
     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
     const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
     setLocation(coords);
     setTracking(true);
     setLoading(false);
-
-    // Reverse geocode to get district name
     fetchDistrictRisk(coords.lat, coords.lng);
-
-    // Watch position updates
     watchRef.current = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.Balanced, timeInterval: 30000, distanceInterval: 100 },
       (newLoc) => {
-        const newCoords = { lat: newLoc.coords.latitude, lng: newLoc.coords.longitude };
-        setLocation(newCoords);
-        fetchDistrictRisk(newCoords.lat, newCoords.lng);
+        const nc = { lat: newLoc.coords.latitude, lng: newLoc.coords.longitude };
+        setLocation(nc);
+        fetchDistrictRisk(nc.lat, nc.lng);
       }
     );
   };
@@ -53,28 +47,19 @@ export default function LiveTrackingScreen() {
       const addr = data.address ?? {};
       const stateName = addr.state ?? '';
       const districtName = addr.county ?? addr.state_district ?? addr.city ?? '';
-
       if (stateName && districtName) {
         const risk = crimeDataService.getDistrictRisk(stateName, districtName, new Date().getHours());
-        setDistrictInfo({
-          name: districtName,
-          state: stateName,
-          risk: risk.risk_level,
-          color: risk.color,
-          crimes: risk.total_crimes,
-        });
+        setDistrictInfo({ name: districtName, state: stateName, risk: risk.risk_level, color: risk.color, crimes: risk.total_crimes });
       }
     } catch { /* Silently fail */ }
   };
 
   const stopTracking = () => {
     if (watchRef.current) { watchRef.current.remove(); watchRef.current = null; }
-    setTracking(false);
-    setLocation(null);
-    setDistrictInfo(null);
+    setTracking(false); setLocation(null); setDistrictInfo(null);
   };
 
-  useEffect(() => { return () => { if (watchRef.current) watchRef.current.remove(); }; }, []);
+  useEffect(() => () => { if (watchRef.current) watchRef.current.remove(); }, []);
 
   const shareLocation = async () => {
     if (!location) return;
@@ -86,15 +71,15 @@ export default function LiveTrackingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Live Tracking</Text>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Live Tracking</Text>
           {tracking && districtInfo && (
-            <Text style={styles.subtitle}>{districtInfo.name}, {districtInfo.state}</Text>
+            <Text style={[styles.subtitle, { color: colors.textMuted }]}>{districtInfo.name}, {districtInfo.state}</Text>
           )}
         </View>
         {tracking && districtInfo && (
@@ -113,52 +98,47 @@ export default function LiveTrackingScreen() {
             userLat={location.lat}
             userLng={location.lng}
             markers={[{
-              lat: location.lat,
-              lng: location.lng,
+              lat: location.lat, lng: location.lng,
               color: districtInfo?.color || colors.primary,
               popup: districtInfo ? `${districtInfo.name} — ${districtInfo.risk}` : 'You are here',
             }]}
           />
-
-          {/* Info overlay */}
           {districtInfo && (
-            <View style={styles.infoOverlay}>
+            <View style={[styles.infoOverlay, { backgroundColor: colors.bgCard + 'F0', borderColor: colors.border }]}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.infoDistrict}>{districtInfo.name}</Text>
-                <Text style={styles.infoState}>{districtInfo.state} · {districtInfo.crimes.toLocaleString()} crimes (NCRB)</Text>
+                <Text style={[styles.infoDistrict, { color: colors.textPrimary }]}>{districtInfo.name}</Text>
+                <Text style={[styles.infoState, { color: colors.textMuted }]}>{districtInfo.state} · {districtInfo.crimes.toLocaleString()} crimes (NCRB)</Text>
               </View>
               <View style={[styles.scoreCircle, { borderColor: districtInfo.color }]}>
-                <Text style={[styles.scoreText, { color: districtInfo.color }]}>
+                <Text style={styles.scoreText}>
                   {districtInfo.risk === 'SAFE' ? '🟢' : districtInfo.risk === 'MODERATE' ? '🟡' : '🔴'}
                 </Text>
               </View>
             </View>
           )}
-
-          {/* Bottom actions */}
           <View style={styles.bottomActions}>
-            <TouchableOpacity style={styles.shareBtn} onPress={shareLocation}>
+            <TouchableOpacity style={[styles.shareBtn, { backgroundColor: colors.primary }]} onPress={shareLocation}>
               <Ionicons name="share-outline" size={20} color="#fff" />
               <Text style={styles.shareBtnText}>Share Location</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.stopBtn} onPress={stopTracking}>
+            <TouchableOpacity style={[styles.stopBtn, { backgroundColor: colors.bgCard, borderColor: colors.danger + '55' }]} onPress={stopTracking}>
               <Ionicons name="stop-circle-outline" size={20} color={colors.danger} />
-              <Text style={styles.stopBtnText}>Stop</Text>
+              <Text style={[styles.stopBtnText, { color: colors.danger }]}>Stop</Text>
             </TouchableOpacity>
           </View>
         </View>
       ) : (
         <View style={styles.startContainer}>
-          <View style={styles.startIcon}>
+          <View style={[styles.startIcon, { backgroundColor: colors.primaryGlow }]}>
             <Ionicons name="locate" size={60} color={colors.primary} />
           </View>
-          <Text style={styles.startTitle}>Real-Time Location Tracking</Text>
-          <Text style={styles.startDesc}>
+          <Text style={[styles.startTitle, { color: colors.textPrimary }]}>Real-Time Location Tracking</Text>
+          <Text style={[styles.startDesc, { color: colors.textSecondary }]}>
             Track your location live on the map.{'\n'}
             See your district's safety risk from NCRB data.{'\n'}
             Share your GPS with guardians instantly.
           </Text>
-          <TouchableOpacity style={styles.startBtn} onPress={startTracking} disabled={loading}>
+          <TouchableOpacity style={[styles.startBtn, { backgroundColor: colors.success }]} onPress={startTracking} disabled={loading}>
             <Ionicons name="navigate" size={22} color="#fff" />
             <Text style={styles.startBtnText}>{loading ? 'Getting Location…' : 'Start Tracking'}</Text>
           </TouchableOpacity>
@@ -169,64 +149,28 @@ export default function LiveTrackingScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
+  safe: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1 },
   backBtn: { padding: 4 },
-  title: { color: colors.textPrimary, fontSize: fontSize.xl, fontWeight: '700' },
-  subtitle: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 1 },
+  title: { fontSize: fontSize.xl, fontWeight: '700' },
+  subtitle: { fontSize: fontSize.xs, marginTop: 1 },
   riskBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
   riskBadgeText: { fontSize: fontSize.xs, fontWeight: '800', letterSpacing: 1 },
   map: { flex: 1 },
-  markerOuter: {
-    width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  markerInner: { width: 14, height: 14, borderRadius: 7 },
-  infoOverlay: {
-    position: 'absolute', top: 16, left: 16, right: 16,
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: 'rgba(15,10,30,0.9)', borderRadius: radius.md,
-    padding: spacing.md, borderWidth: 1, borderColor: colors.border,
-  },
-  infoDistrict: { color: colors.textPrimary, fontSize: fontSize.md, fontWeight: '700' },
-  infoState: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
-  scoreCircle: {
-    width: 44, height: 44, borderRadius: 22, borderWidth: 2,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(15,10,30,0.8)',
-  },
+  infoOverlay: { position: 'absolute', top: 16, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md, borderWidth: 1 },
+  infoDistrict: { fontSize: fontSize.md, fontWeight: '700' },
+  infoState: { fontSize: fontSize.xs, marginTop: 2 },
+  scoreCircle: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   scoreText: { fontSize: 20 },
-  bottomActions: {
-    position: 'absolute', bottom: 30, left: 16, right: 16,
-    flexDirection: 'row', gap: spacing.sm,
-  },
-  shareBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md,
-  },
+  bottomActions: { position: 'absolute', bottom: 30, left: 16, right: 16, flexDirection: 'row', gap: spacing.sm },
+  shareBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md },
   shareBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.md },
-  stopBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.xs, backgroundColor: 'rgba(15,10,30,0.9)', borderRadius: radius.md,
-    padding: spacing.md, borderWidth: 1, borderColor: colors.danger + '55',
-    paddingHorizontal: spacing.lg,
-  },
-  stopBtnText: { color: colors.danger, fontWeight: '700', fontSize: fontSize.md },
+  stopBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, paddingHorizontal: spacing.lg },
+  stopBtnText: { fontWeight: '700', fontSize: fontSize.md },
   startContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.lg },
-  startIcon: {
-    width: 120, height: 120, borderRadius: 60,
-    backgroundColor: colors.primaryGlow, alignItems: 'center', justifyContent: 'center',
-  },
-  startTitle: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '900', textAlign: 'center' },
-  startDesc: { color: colors.textSecondary, fontSize: fontSize.md, textAlign: 'center', lineHeight: 24 },
-  startBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, backgroundColor: colors.success,
-    borderRadius: radius.lg, padding: spacing.lg, paddingHorizontal: spacing.xl,
-  },
+  startIcon: { width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center' },
+  startTitle: { fontSize: fontSize.xxl, fontWeight: '900', textAlign: 'center' },
+  startDesc: { fontSize: fontSize.md, textAlign: 'center', lineHeight: 24 },
+  startBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.lg, padding: spacing.lg, paddingHorizontal: spacing.xl },
   startBtnText: { color: '#fff', fontSize: fontSize.lg, fontWeight: '800' },
 });

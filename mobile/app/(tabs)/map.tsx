@@ -10,10 +10,13 @@ import { useCrimeData } from '../../hooks/useCrimeData';
 import { crimeDataService, STATE_COORDS } from '../../services/crimeDataService';
 import type { DistrictRisk } from '../../services/crimeDataService';
 import { useSettingsStore } from '../../store/settingsStore';
-import { colors, fontSize, spacing, radius } from '../../constants/theme';
+import { fontSize, spacing, radius, type ThemeColors } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 export default function SafeMapScreen() {
   const { loaded } = useCrimeData();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { mapTheme, update: updateSettings } = useSettingsStore();
   const [selectedState, setSelectedState] = useState('All');
   const [selectedDistrict, setSelectedDistrict] = useState<(DistrictRisk & { lat: number; lng: number }) | null>(null);
@@ -402,7 +405,8 @@ export default function SafeMapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   loadingText: { color: colors.textPrimary, fontSize: fontSize.lg, fontWeight: '700' },
@@ -521,4 +525,5 @@ const styles = StyleSheet.create({
   pickerItemMeta: { color: colors.textMuted, fontSize: fontSize.xs },
   pickerClose: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.md },
   pickerCloseText: { color: '#fff', fontWeight: '800', fontSize: fontSize.md },
-});
+  });
+}

@@ -10,179 +10,228 @@ import { useGuardianStore } from '../../store/guardianStore';
 import { useAuthStore } from '../../store/authStore';
 import { quickCall } from '../../services/alertService';
 import { HELPLINES } from '../../constants/helplines';
-import { colors, fontSize, spacing, radius } from '../../constants/theme';
+import { fontSize, spacing, radius } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profileName, bloodGroup, medicalNotes, update } = useSettingsStore();
+  const { colors } = useAppTheme();
+  const { bloodGroup, medicalNotes, update } = useSettingsStore();
   const { guardians } = useGuardianStore();
-  const { currentUser, logout } = useAuthStore();
+  const { currentUser, logout, updateProfile } = useAuthStore();
+
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(profileName);
+  // Pull name from authStore (the real DB name), not settingsStore
+  const [name, setName] = useState(currentUser?.name ?? '');
   const [blood, setBlood] = useState(bloodGroup);
   const [notes, setNotes] = useState(medicalNotes);
+  const [saving, setSaving] = useState(false);
 
-  const saveProfile = () => {
-    update({ profileName: name, bloodGroup: blood, medicalNotes: notes });
+  const displayName = currentUser?.name || 'Your Name';
+
+  const saveProfile = async () => {
+    if (!name.trim()) {
+      Alert.alert('Required', 'Name cannot be empty.');
+      return;
+    }
+    setSaving(true);
+    try {
+      // Update name in the database via authStore
+      await updateProfile({ name: name.trim() });
+      // Update blood/notes in settingsStore
+      update({ bloodGroup: blood, medicalNotes: notes });
+      setEditing(false);
+    } catch {
+      Alert.alert('Error', 'Could not save profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setName(currentUser?.name ?? '');
+    setBlood(bloodGroup);
+    setNotes(medicalNotes);
     setEditing(false);
   };
 
   const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+
         {/* Hero card */}
-        <View style={styles.heroCard}>
-          <View style={styles.avatar}>
+        <View style={[styles.heroCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
             <Text style={styles.avatarText}>
-              {(profileName || 'S').charAt(0).toUpperCase()}
+              {displayName.charAt(0).toUpperCase()}
             </Text>
           </View>
-          <Text style={styles.name}>{profileName || 'Your Name'}</Text>
-          <View style={[styles.verifiedBadge]}>
+          <Text style={[styles.name, { color: colors.textPrimary }]}>{displayName}</Text>
+          {currentUser?.phone && (
+            <Text style={[styles.phone, { color: colors.textMuted }]}>{currentUser.phone}</Text>
+          )}
+          <View style={[styles.verifiedBadge, { backgroundColor: colors.successGlow }]}>
             <Ionicons name="shield-checkmark" size={14} color={colors.success} />
-            <Text style={styles.verifiedText}>SafeHer User</Text>
+            <Text style={[styles.verifiedText, { color: colors.success }]}>SafeHer User</Text>
           </View>
+          <TouchableOpacity
+            style={[styles.editBtn, { backgroundColor: colors.primaryGlow, borderColor: colors.primary }]}
+            onPress={() => setEditing(true)}
+          >
+            <Ionicons name="create-outline" size={16} color={colors.primary} />
+            <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit Profile</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Medical card */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🩺 Medical Info</Text>
-            <TouchableOpacity onPress={() => setEditing(!editing)}>
-              <Ionicons name={editing ? 'close-circle' : 'pencil'} size={20} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
+        {/* Edit form */}
+        {editing && (
+          <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Edit Profile</Text>
 
-          {editing ? (
-            <View style={styles.editForm}>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Full Name"
-                placeholderTextColor={colors.textMuted}
-              />
-              <Text style={styles.fieldLabel}>Blood Group</Text>
-              <View style={styles.bloodRow}>
-                {BLOOD_GROUPS.map((bg) => (
-                  <TouchableOpacity
-                    key={bg}
-                    style={[styles.bloodChip, blood === bg && styles.bloodChipActive]}
-                    onPress={() => setBlood(bg)}
-                  >
-                    <Text style={[styles.bloodText, blood === bg && styles.bloodTextActive]}>{bg}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <TextInput
-                style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Allergies, conditions, medications..."
-                placeholderTextColor={colors.textMuted}
-                multiline
-              />
-              <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
-                <Text style={styles.saveBtnText}>Save Profile</Text>
+            <Text style={[styles.label, { color: colors.textMuted }]}>Full Name</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.bgElevated, borderColor: colors.primary, color: colors.textPrimary }]}
+              value={name}
+              onChangeText={setName}
+              placeholder="Your full name"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+            />
+
+            <Text style={[styles.label, { color: colors.textMuted }]}>Blood Group</Text>
+            <View style={styles.bloodGrid}>
+              {BLOOD_GROUPS.map((bg) => (
+                <TouchableOpacity
+                  key={bg}
+                  style={[
+                    styles.bloodChip,
+                    { backgroundColor: colors.bgElevated, borderColor: colors.border },
+                    blood === bg && { backgroundColor: colors.dangerGlow, borderColor: colors.danger },
+                  ]}
+                  onPress={() => setBlood(bg)}
+                >
+                  <Text style={[styles.bloodChipText, { color: blood === bg ? colors.danger : colors.textMuted }]}>{bg}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.label, { color: colors.textMuted }]}>Medical Notes</Text>
+            <TextInput
+              style={[styles.inputMulti, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Allergies, conditions, medications..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.editActions}>
+              <TouchableOpacity style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={cancelEdit}>
+                <Text style={[styles.cancelBtnText, { color: colors.textMuted }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: colors.primary }]}
+                onPress={saveProfile}
+                disabled={saving}
+              >
+                <Text style={styles.saveBtnText}>{saving ? 'Saving...' : 'Save Changes'}</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            <View style={styles.medRow}>
-              <View style={styles.medItem}>
-                <Text style={styles.medLabel}>Blood Group</Text>
-                <Text style={styles.medValue}>{bloodGroup || '—'}</Text>
-              </View>
-              <View style={styles.medItem}>
-                <Text style={styles.medLabel}>Guardians</Text>
-                <Text style={styles.medValue}>{guardians.length}</Text>
-              </View>
-            </View>
-          )}
+          </View>
+        )}
 
-          {!editing && medicalNotes ? (
-            <View style={styles.notesBox}>
-              <Text style={styles.notesLabel}>Medical Notes</Text>
-              <Text style={styles.notesText}>{medicalNotes}</Text>
+        {/* Medical Info */}
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="heart" size={18} color={colors.danger} />
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Medical Information</Text>
+          </View>
+          <View style={[styles.infoRow, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Blood Group</Text>
+            <View style={[styles.bloodBadge, { backgroundColor: blood ? colors.dangerGlow : colors.bgElevated }]}>
+              <Text style={[styles.bloodBadgeText, { color: blood ? colors.danger : colors.textMuted }]}>
+                {blood || 'Not set'}
+              </Text>
             </View>
-          ) : null}
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Medical Notes</Text>
+            <Text style={[styles.infoValue, { color: colors.textSecondary }]}>
+              {notes || 'No medical notes added'}
+            </Text>
+          </View>
         </View>
 
-        {/* Guardians preview */}
-        <View style={styles.section}>
+        {/* Guardians summary */}
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>👥 Guardians</Text>
-            <TouchableOpacity onPress={() => router.push('/guardians')}>
-              <Text style={styles.manageLink}>Manage</Text>
+            <Ionicons name="people" size={18} color={colors.accent} />
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Emergency Contacts</Text>
+            <TouchableOpacity onPress={() => router.push('/guardians')} style={styles.seeAllBtn}>
+              <Text style={[styles.seeAll, { color: colors.primary }]}>Manage</Text>
             </TouchableOpacity>
           </View>
-          {guardians.slice(0, 3).map((g) => (
-            <View key={g.id} style={styles.guardianRow}>
-              <View style={styles.gAvatar}>
-                <Text style={styles.gAvatarText}>{g.name.charAt(0)}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.gName}>{g.name}</Text>
-                <Text style={styles.gSub}>{g.relation}</Text>
-              </View>
-              <TouchableOpacity onPress={() => quickCall(g.phone)}>
-                <Ionicons name="call" size={20} color={colors.success} />
-              </TouchableOpacity>
-            </View>
-          ))}
-          {guardians.length === 0 && (
-            <TouchableOpacity style={styles.addGuardianBtn} onPress={() => router.push('/guardians')}>
-              <Ionicons name="person-add-outline" size={18} color={colors.primary} />
-              <Text style={styles.addGuardianText}>Add Emergency Contacts</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* All helplines */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📞 All Helplines</Text>
-          {HELPLINES.map((h) => (
+          {guardians.length === 0 ? (
             <TouchableOpacity
-              key={h.number}
-              style={styles.helplineRow}
-              onPress={() => quickCall(h.number)}
+              style={[styles.addGuardianPrompt, { backgroundColor: colors.primaryGlow, borderColor: colors.primary }]}
+              onPress={() => router.push('/guardians')}
             >
-              <Text style={styles.helplineName}>{h.name}</Text>
-              <Text style={styles.helplineNumber}>{h.number}</Text>
+              <Ionicons name="person-add" size={20} color={colors.primary} />
+              <Text style={[styles.addGuardianText, { color: colors.primary }]}>Add emergency contacts for SOS alerts</Text>
             </TouchableOpacity>
-          ))}
+          ) : (
+            guardians.map((g) => (
+              <View key={g.id} style={[styles.guardianRow, { borderBottomColor: colors.border }]}>
+                <View style={[styles.guardianAvatar, { backgroundColor: colors.accent }]}>
+                  <Text style={styles.guardianAvatarText}>{g.name.charAt(0)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.guardianName, { color: colors.textPrimary }]}>{g.name}</Text>
+                  <Text style={[styles.guardianSub, { color: colors.textMuted }]}>{g.relation} · {g.phone}</Text>
+                </View>
+                <TouchableOpacity onPress={() => quickCall(g.phone)} style={[styles.callBtn, { backgroundColor: colors.successGlow }]}>
+                  <Ionicons name="call" size={18} color={colors.success} />
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </View>
 
-        {/* Alert history */}
-        <TouchableOpacity
-          style={styles.historyBtn}
-          onPress={() => router.push('/alert-history')}
-        >
-          <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
-          <Text style={styles.historyBtnText}>View Alert History</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
-
-        {/* Settings */}
-        <TouchableOpacity style={styles.historyBtn} onPress={() => router.push('/settings')}>
-          <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
-          <Text style={styles.historyBtnText}>Settings</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
+        {/* Quick helplines */}
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="call" size={18} color={colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Emergency Helplines</Text>
+          </View>
+          <View style={styles.helplinesGrid}>
+            {HELPLINES.slice(0, 4).map((h) => (
+              <TouchableOpacity
+                key={h.number}
+                style={[styles.helplineChip, { backgroundColor: colors.bgElevated, borderColor: colors.border }]}
+                onPress={() => quickCall(h.number)}
+              >
+                <Text style={[styles.helplineNum, { color: colors.primary }]}>{h.number}</Text>
+                <Text style={[styles.helplineName, { color: colors.textMuted }]}>{h.name.split(' ').slice(0, 2).join(' ')}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
         {/* Logout */}
         <TouchableOpacity
-          style={styles.logoutBtn}
+          style={[styles.logoutBtn, { backgroundColor: colors.bgCard, borderColor: colors.danger }]}
           onPress={() => {
-            Alert.alert('Logout', 'Are you sure?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Logout', style: 'destructive', onPress: () => logout() },
+            Alert.alert('Logout', 'Are you sure you want to logout?', [
+              { text: 'Cancel' },
+              { text: 'Logout', style: 'destructive', onPress: logout },
             ]);
           }}
         >
           <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={[styles.logoutText, { color: colors.danger }]}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -190,102 +239,95 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 60 },
+  safe: { flex: 1 },
+  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: 80 },
   heroCard: {
-    backgroundColor: colors.bgCard, borderRadius: radius.xl,
-    borderWidth: 1, borderColor: colors.border,
-    padding: spacing.xl, alignItems: 'center', gap: spacing.md,
+    borderRadius: radius.xl, borderWidth: 1, padding: spacing.xl,
+    alignItems: 'center', gap: spacing.sm,
   },
   avatar: {
-    width: 90, height: 90, borderRadius: 45,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+    width: 88, height: 88, borderRadius: 44,
+    alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { color: '#fff', fontSize: fontSize.xxxl, fontWeight: '900' },
-  name: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '800' },
+  avatarText: { fontSize: 36, fontWeight: '900', color: '#fff' },
+  name: { fontSize: fontSize.xxl, fontWeight: '900' },
+  phone: { fontSize: fontSize.sm, marginTop: -4 },
   verifiedBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: colors.successGlow, borderRadius: radius.full,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderWidth: 1, borderColor: colors.success + '44',
+    borderRadius: radius.full,
   },
-  verifiedText: { color: colors.success, fontSize: fontSize.xs, fontWeight: '700' },
-  section: {
-    backgroundColor: colors.bgCard, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm,
+  verifiedText: { fontSize: fontSize.xs, fontWeight: '700' },
+  editBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: spacing.md, paddingVertical: 8,
+    borderRadius: radius.full, borderWidth: 1, marginTop: spacing.xs,
   },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { color: colors.textPrimary, fontSize: fontSize.lg, fontWeight: '700' },
-  manageLink: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '700' },
-  editForm: { gap: spacing.sm },
+  editBtnText: { fontSize: fontSize.sm, fontWeight: '700' },
+  section: { borderRadius: radius.lg, borderWidth: 1, padding: spacing.md, gap: spacing.sm },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 4 },
+  sectionTitle: { flex: 1, fontSize: fontSize.md, fontWeight: '700' },
+  seeAllBtn: { padding: 4 },
+  seeAll: { fontSize: fontSize.sm, fontWeight: '600' },
+  label: { fontSize: fontSize.xs, fontWeight: '700', letterSpacing: 0.5 },
   input: {
-    backgroundColor: colors.bgElevated, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
-    color: colors.textPrimary, fontSize: fontSize.md, padding: spacing.md,
+    borderRadius: radius.md, borderWidth: 1.5,
+    padding: spacing.md, fontSize: fontSize.md, marginBottom: spacing.sm,
   },
-  fieldLabel: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700', letterSpacing: 1 },
-  bloodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  inputMulti: {
+    borderRadius: radius.md, borderWidth: 1,
+    padding: spacing.md, fontSize: fontSize.sm,
+    height: 80, textAlignVertical: 'top',
+  },
+  bloodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   bloodChip: {
-    paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full,
-    backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: spacing.sm, paddingVertical: 6,
+    borderRadius: radius.md, borderWidth: 1,
   },
-  bloodChipActive: { backgroundColor: colors.primaryGlow, borderColor: colors.primary },
-  bloodText: { color: colors.textMuted, fontWeight: '700', fontSize: fontSize.sm },
-  bloodTextActive: { color: colors.primary },
-  saveBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.md,
+  bloodChipText: { fontSize: fontSize.sm, fontWeight: '700' },
+  editActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  cancelBtn: {
+    flex: 1, borderRadius: radius.md, borderWidth: 1,
     padding: spacing.md, alignItems: 'center',
   },
-  saveBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.md },
-  medRow: { flexDirection: 'row', gap: spacing.md },
-  medItem: {
-    flex: 1, backgroundColor: colors.bgElevated, borderRadius: radius.md,
-    padding: spacing.md, alignItems: 'center',
+  cancelBtnText: { fontSize: fontSize.sm, fontWeight: '700' },
+  saveBtn: { flex: 2, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
+  saveBtnText: { color: '#fff', fontSize: fontSize.sm, fontWeight: '800' },
+  infoRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
   },
-  medLabel: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '600' },
-  medValue: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '900', marginTop: 4 },
-  notesBox: {
-    backgroundColor: colors.bgElevated, borderRadius: radius.md,
-    padding: spacing.md, borderWidth: 1, borderColor: colors.border,
+  infoLabel: { fontSize: fontSize.sm },
+  infoValue: { fontSize: fontSize.sm, flex: 1, textAlign: 'right' },
+  bloodBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full },
+  bloodBadgeText: { fontSize: fontSize.sm, fontWeight: '800' },
+  addGuardianPrompt: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    padding: spacing.md, borderRadius: radius.md, borderWidth: 1,
   },
-  notesLabel: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700', marginBottom: 4 },
-  notesText: { color: colors.textSecondary, fontSize: fontSize.sm, lineHeight: 20 },
+  addGuardianText: { flex: 1, fontSize: fontSize.sm, fontWeight: '600' },
   guardianRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    paddingVertical: spacing.xs,
+    flexDirection: 'row', alignItems: 'center',
+    gap: spacing.sm, paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
   },
-  gAvatar: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.accentGlow, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: colors.accent + '44',
+  guardianAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  guardianAvatarText: { color: '#fff', fontWeight: '800', fontSize: fontSize.md },
+  guardianName: { fontSize: fontSize.sm, fontWeight: '700' },
+  guardianSub: { fontSize: fontSize.xs },
+  callBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  helplinesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  helplineChip: {
+    width: '47%', borderRadius: radius.md, borderWidth: 1,
+    padding: spacing.sm, alignItems: 'center', gap: 2,
   },
-  gAvatarText: { color: colors.accent, fontWeight: '800', fontSize: fontSize.md },
-  gName: { color: colors.textPrimary, fontSize: fontSize.sm, fontWeight: '700' },
-  gSub: { color: colors.textMuted, fontSize: fontSize.xs },
-  addGuardianBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    padding: spacing.md, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.primary + '55',
-    backgroundColor: colors.primaryGlow, justifyContent: 'center',
-  },
-  addGuardianText: { color: colors.primary, fontWeight: '700', fontSize: fontSize.sm },
-  helplineRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  helplineName: { color: colors.textSecondary, fontSize: fontSize.sm },
-  helplineNumber: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '700' },
-  historyBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.bgCard, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md,
-  },
-  historyBtnText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.md, fontWeight: '600' },
+  helplineNum: { fontSize: fontSize.xl, fontWeight: '900' },
+  helplineName: { fontSize: 9, textAlign: 'center' },
   logoutBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.dangerGlow, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.danger + '44', padding: spacing.md,
-    justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm, borderRadius: radius.lg, borderWidth: 1.5,
+    padding: spacing.md,
   },
-  logoutText: { color: colors.danger, fontSize: fontSize.md, fontWeight: '700' },
+  logoutText: { fontSize: fontSize.md, fontWeight: '700' },
 });

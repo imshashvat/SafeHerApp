@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
   TouchableOpacity, TextInput, Alert,
@@ -6,7 +6,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, fontSize, spacing, radius } from '../constants/theme';
+import { fontSize, spacing, radius, type ThemeColors } from '../constants/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 const COMPANIONS_KEY = '@safeher_companions';
 
@@ -22,6 +23,8 @@ type CompanionRequest = {
 
 export default function CompanionScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [requests, setRequests] = useState<CompanionRequest[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
@@ -209,7 +212,8 @@ export default function CompanionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -269,4 +273,5 @@ const styles = StyleSheet.create({
   },
   infoTitle: { color: colors.accent, fontSize: fontSize.sm, fontWeight: '700' },
   infoText: { color: colors.textSecondary, fontSize: fontSize.xs, lineHeight: 18 },
-});
+  });
+}

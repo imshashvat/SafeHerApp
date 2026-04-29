@@ -1,8 +1,8 @@
 import { Stack } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator, Text } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Text, Platform } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useGuardianStore } from '../store/guardianStore';
@@ -11,6 +11,7 @@ import { useShakeDetection } from '../hooks/useShakeDetection';
 import { useFallDetection } from '../hooks/useFallDetection';
 import { useVoiceDetection } from '../hooks/useVoiceDetection';
 import { useSOSDispatch } from '../hooks/useSOSDispatch';
+import { useLocation } from '../hooks/useLocation';
 import { crimeDataService } from '../services/crimeDataService';
 import { initDatabase } from '../services/database';
 import { Audio } from 'expo-av';
@@ -29,30 +30,48 @@ function InnerLayout() {
   const { load: loadGuardians } = useGuardianStore();
   const { load: loadAlertHistory } = useAlertHistoryStore();
   const { appTheme, colors } = useAppTheme();
+  const { startBackgroundWatch, stopBackgroundWatch } = useLocation();
+  const locationWatchStarted = useRef(false);
 
   // Initialize database and restore session
   useEffect(() => {
     (async () => {
       await initDatabase();
       await restoreSession();
-      // Request microphone permission up-front so voice detection doesn't
-      // get silently denied when it starts polling later.
+
+      // Request microphone permission up-front
       Audio.requestPermissionsAsync().catch(() => {});
+
+      // Request location permission up-front (so SOS always has coords)
+      // Note: CALL_PHONE on Android is declared in AndroidManifest.xml
+      // expo-location handles the runtime request
     })();
 
     // Load ML crime data (bundled, no network needed)
     crimeDataService.load();
 
-    // Start foreground service so Android keeps app alive when screen is off.
+    // Start foreground service so Android keeps app alive when screen is off
     startForegroundService().catch(() => {});
   }, []);
 
-  // Load user-specific data when user logs in
+  // Load user-specific data when user logs in + start location watch
   useEffect(() => {
     if (isLoggedIn && currentUser) {
       loadSettings(currentUser.id);
       loadGuardians(currentUser.id);
       loadAlertHistory(currentUser.id);
+
+      // Start continuous background location watch so SOS always has fresh coords
+      if (!locationWatchStarted.current) {
+        locationWatchStarted.current = true;
+        startBackgroundWatch();
+      }
+    }
+
+    // Stop watching on logout
+    if (!isLoggedIn && locationWatchStarted.current) {
+      locationWatchStarted.current = false;
+      stopBackgroundWatch();
     }
   }, [isLoggedIn, currentUser?.id]);
 

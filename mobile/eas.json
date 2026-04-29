@@ -6,15 +6,25 @@
   "build": {
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
       "distribution": "store",
+      "channel": "production",
       "android": {
         "buildType": "app-bundle"
       }
+    }
+  },
+  "update": {
+    "production": {
+      "branch": "production"
+    },
+    "preview": {
+      "branch": "preview"
     }
   },
   "submit": {

@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   SafeAreaView, Switch, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, fontSize, spacing, radius } from '../../constants/theme';
+import { fontSize, spacing, radius, type ThemeColors } from '../../constants/theme';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { useGuardianStore } from '../../store/guardianStore';
 import { quickCall } from '../../services/alertService';
 
@@ -35,6 +36,8 @@ function getTimeLeft(deadline: number | null): { text: string; overdue: boolean;
 }
 
 export default function CheckInScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [selectedInterval, setSelectedInterval] = useState(30);
   const [tick, setTick] = useState(0); // force re-render every second
@@ -241,7 +244,8 @@ export default function CheckInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   title: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '800' },
@@ -302,4 +306,5 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.accent + '33', padding: spacing.md,
   },
   infoText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.xs, lineHeight: 18 },
-});
+  });
+}

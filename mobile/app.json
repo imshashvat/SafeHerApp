@@ -3,6 +3,15 @@
     "name": "SafeHer",
     "slug": "safeher-mobile",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b7e476bd-25e5-46dd-950c-33c634eb24b1",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -52,6 +61,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-updates",
       "expo-sqlite",
       [
         "expo-camera",

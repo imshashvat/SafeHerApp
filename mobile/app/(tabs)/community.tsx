@@ -1,293 +1,433 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, TextInput, Alert,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  TextInput, SafeAreaView, Alert, Modal, ActivityIndicator,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, fontSize, spacing, radius } from '../../constants/theme';
+import * as Location from 'expo-location';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { fontSize, spacing, radius } from '../../constants/theme';
+import { useAuthStore } from '../../store/authStore';
+import LeafletMapView from '../../components/LeafletMapView';
 
-const POSTS_KEY = '@safeher_posts';
+const POSTS_KEY = '@safeher_community_posts';
 
-type Post = {
+type PostTag = 'Incident Alert' | 'Safe Zone' | 'Safety Tip' | 'Support';
+
+const TAG_CONFIG: Record<PostTag, { color: string; icon: string }> = {
+  'Incident Alert': { color: '#FF3366', icon: '🚨' },
+  'Safe Zone': { color: '#00D4AA', icon: '🟢' },
+  'Safety Tip': { color: '#8B5CF6', icon: '💡' },
+  'Support': { color: '#F59E0B', icon: '💛' },
+};
+
+interface CommunityPost {
   id: string;
   author: string;
   content: string;
-  tag: string;
+  tag: PostTag;
   timestamp: number;
   likes: number;
-};
+  likedByMe: boolean;
+  location?: string;     // Human-readable area name
+  lat?: number;
+  lng?: number;
+}
 
-const TAGS = ['Safety Tip', 'Incident Alert', 'Safe Zone', 'Travel Partner', 'Support'];
-const TAG_COLORS: Record<string, string> = {
-  'Safety Tip': colors.success,
-  'Incident Alert': colors.danger,
-  'Safe Zone': colors.accent,
-  'Travel Partner': colors.primary,
-  'Support': colors.warning,
-};
-
-function timeAgo(ts: number) {
+function timeAgo(ts: number): string {
   const diff = (Date.now() - ts) / 1000;
-  if (diff < 60) return 'just now';
+  if (diff < 60) return 'Just now';
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+async function fetchAreaName(lat: number, lng: number): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&zoom=12`,
+      { headers: { 'Accept-Language': 'en', 'User-Agent': 'SafeHer/1.0' } }
+    );
+    const data = await res.json() as { address?: Record<string, string> };
+    const addr = data.address ?? {};
+    const area = addr.suburb ?? addr.neighbourhood ?? addr.city_district ?? addr.county ?? addr.city ?? '';
+    const city = addr.city ?? addr.town ?? addr.state_district ?? '';
+    return area && city && area !== city ? `${area}, ${city}` : area || city || 'Nearby';
+  } catch {
+    return 'Nearby';
+  }
+}
+
 export default function CommunityScreen() {
-  const [posts, setPosts] = useState<Post[]>([]);
+  const { colors } = useAppTheme();
+  const { currentUser } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<'feed' | 'map'>('feed');
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showCompose, setShowCompose] = useState(false);
+
+  // Compose state
   const [content, setContent] = useState('');
-  const [selectedTag, setSelectedTag] = useState(TAGS[0]);
-  const [authorName, setAuthorName] = useState('');
-  const [filter, setFilter] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [selectedTag, setSelectedTag] = useState<PostTag>('Safety Tip');
+  const [submitting, setSubmitting] = useState(false);
+  const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Load posts from AsyncStorage on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(POSTS_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Post[];
-          setPosts(parsed);
-        }
-      } catch (err) {
-        console.error('Failed to load community posts', err);
-      }
-      setLoaded(true);
-    })();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  // Persist posts whenever they change
-  const savePosts = async (updated: Post[]) => {
-    setPosts(updated);
+  const load = async () => {
     try {
-      await AsyncStorage.setItem(POSTS_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.error('Failed to save community posts', err);
+      const raw = await AsyncStorage.getItem(POSTS_KEY);
+      setPosts(raw ? JSON.parse(raw) : []);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const addPost = () => {
-    if (!content.trim()) return;
-    const newPost: Post = {
-      id: Date.now().toString(),
-      author: authorName.trim() || 'Anonymous',
-      content: content.trim(),
-      tag: selectedTag,
-      timestamp: Date.now(),
-      likes: 0,
-    };
-    savePosts([newPost, ...posts]);
-    setContent(''); setShowCompose(false);
+  const save = async (updated: CommunityPost[]) => {
+    await AsyncStorage.setItem(POSTS_KEY, JSON.stringify(updated));
   };
 
-  const likePost = (id: string) => {
-    savePosts(posts.map((p) => p.id === id ? { ...p, likes: p.likes + 1 } : p));
+  const fetchMyLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return null;
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      return { lat: loc.coords.latitude, lng: loc.coords.longitude };
+    } catch { return null; }
   };
 
-  const deletePost = (id: string) => {
-    Alert.alert('Delete Post', 'Are you sure?', [
+  const submitPost = async () => {
+    if (!content.trim()) { Alert.alert('Empty', 'Please write something.'); return; }
+    setSubmitting(true);
+    try {
+      const loc = await fetchMyLocation();
+      setMyLocation(loc);
+      const areaName = loc ? await fetchAreaName(loc.lat, loc.lng) : undefined;
+
+      const post: CommunityPost = {
+        id: `${Date.now()}_${Math.random()}`,
+        author: currentUser?.name || 'SafeHer User',
+        content: content.trim(),
+        tag: selectedTag,
+        timestamp: Date.now(),
+        likes: 0,
+        likedByMe: false,
+        location: areaName,
+        lat: loc?.lat,
+        lng: loc?.lng,
+      };
+      const updated = [post, ...posts];
+      setPosts(updated);
+      await save(updated);
+      setContent('');
+      setShowCompose(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleLike = useCallback(async (id: string) => {
+    const updated = posts.map(p =>
+      p.id === id
+        ? { ...p, likes: p.likedByMe ? p.likes - 1 : p.likes + 1, likedByMe: !p.likedByMe }
+        : p
+    );
+    setPosts(updated);
+    await save(updated);
+  }, [posts]);
+
+  const deletePost = useCallback(async (id: string) => {
+    Alert.alert('Delete', 'Remove this post?', [
       { text: 'Cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => savePosts(posts.filter(p => p.id !== id)) },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          const updated = posts.filter(p => p.id !== id);
+          setPosts(updated);
+          await save(updated);
+        }
+      },
     ]);
-  };
+  }, [posts]);
 
-  const filtered = filter ? posts.filter((p) => p.tag === filter) : posts;
+  // Map markers — only posts with coordinates
+  const mapPosts = posts.filter(p => p.lat && p.lng);
+  const mapCenter = myLocation
+    ? [myLocation.lat, myLocation.lng] as [number, number]
+    : mapPosts.length > 0 ? [mapPosts[0].lat!, mapPosts[0].lng!] as [number, number] : [20.5937, 78.9629] as [number, number];
+
+  const renderPost = ({ item }: { item: CommunityPost }) => {
+    const tagCfg = TAG_CONFIG[item.tag];
+    const isOwn = item.author === (currentUser?.name || 'SafeHer User');
+    return (
+      <View style={[styles.postCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+        <View style={styles.postHeader}>
+          <View style={[styles.postAvatar, { backgroundColor: colors.primary }]}>
+            <Text style={styles.postAvatarText}>{item.author.charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.postAuthor, { color: colors.textPrimary }]}>{item.author}</Text>
+            <View style={styles.postMeta}>
+              <Text style={[styles.postTime, { color: colors.textMuted }]}>{timeAgo(item.timestamp)}</Text>
+              {item.location && (
+                <>
+                  <Text style={[styles.postMetaDot, { color: colors.textMuted }]}>·</Text>
+                  <Ionicons name="location-outline" size={10} color={colors.textMuted} />
+                  <Text style={[styles.postLocation, { color: colors.textMuted }]}>{item.location}</Text>
+                </>
+              )}
+            </View>
+          </View>
+          <View style={[styles.postTag, { backgroundColor: `${tagCfg.color}18` }]}>
+            <Text style={styles.postTagEmoji}>{tagCfg.icon}</Text>
+            <Text style={[styles.postTagText, { color: tagCfg.color }]}>{item.tag}</Text>
+          </View>
+          {isOwn && (
+            <TouchableOpacity onPress={() => deletePost(item.id)} style={{ padding: 4 }}>
+              <Ionicons name="trash-outline" size={15} color={colors.danger} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={[styles.postContent, { color: colors.textSecondary }]}>{item.content}</Text>
+        <View style={[styles.postFooter, { borderTopColor: colors.border }]}>
+          <TouchableOpacity style={styles.likeBtn} onPress={() => toggleLike(item.id)}>
+            <Ionicons name={item.likedByMe ? 'heart' : 'heart-outline'} size={16} color={item.likedByMe ? '#FF3366' : colors.textMuted} />
+            <Text style={[styles.likeCount, { color: item.likedByMe ? '#FF3366' : colors.textMuted }]}>{item.likes}</Text>
+          </TouchableOpacity>
+          {item.lat && item.lng && (
+            <View style={styles.gpsTag}>
+              <Ionicons name="navigate" size={10} color={tagCfg.color} />
+              <Text style={[styles.gpsTagText, { color: tagCfg.color }]}>GPS tagged</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Community</Text>
-          <Text style={styles.subtitle}>Women-only safety network · {posts.length} posts</Text>
-        </View>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Community</Text>
         <TouchableOpacity
-          style={styles.composeBtn}
-          onPress={() => setShowCompose(!showCompose)}
+          style={[styles.composeBtn, { backgroundColor: colors.primary }]}
+          onPress={() => setShowCompose(true)}
         >
-          <Ionicons name={showCompose ? 'close' : 'create-outline'} size={20} color="#fff" />
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.composeBtnText}>Post</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Compose */}
-        {showCompose && (
-          <View style={styles.compose}>
-            <TextInput
-              style={styles.input}
-              placeholder="Your name (optional)"
-              placeholderTextColor={colors.textMuted}
-              value={authorName}
-              onChangeText={setAuthorName}
-            />
-            <TextInput
-              style={[styles.input, styles.inputMulti]}
-              placeholder="Share a safety tip, alert, or find travel companions..."
-              placeholderTextColor={colors.textMuted}
-              value={content}
-              onChangeText={setContent}
-              multiline
-              numberOfLines={4}
-            />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tagsScroll}>
-              {TAGS.map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.tag, { borderColor: TAG_COLORS[t] + '88' },
-                    selectedTag === t && { backgroundColor: TAG_COLORS[t] + '22' }]}
-                  onPress={() => setSelectedTag(t)}
-                >
-                  <Text style={[styles.tagText, { color: TAG_COLORS[t] }]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity style={styles.postBtn} onPress={addPost}>
-              <Text style={styles.postBtnText}>Post</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Filter chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}
-          contentContainerStyle={styles.filterContent}>
+      {/* Sub-tabs */}
+      <View style={[styles.subTabs, { backgroundColor: colors.bgCard, borderBottomColor: colors.border }]}>
+        {(['feed', 'map'] as const).map(tab => (
           <TouchableOpacity
-            style={[styles.filterChip, filter === null && styles.filterChipActive]}
-            onPress={() => setFilter(null)}
+            key={tab}
+            style={[styles.subTab, activeTab === tab && [styles.subTabActive, { borderBottomColor: colors.primary }]]}
+            onPress={() => {
+              setActiveTab(tab);
+              if (tab === 'map' && !myLocation) fetchMyLocation().then(setMyLocation);
+            }}
           >
-            <Text style={[styles.filterText, filter === null && styles.filterTextActive]}>All</Text>
+            <Ionicons
+              name={tab === 'feed' ? 'newspaper-outline' : 'map-outline'}
+              size={14}
+              color={activeTab === tab ? colors.primary : colors.textMuted}
+            />
+            <Text style={[styles.subTabText, { color: activeTab === tab ? colors.primary : colors.textMuted }]}>
+              {tab === 'feed' ? 'Feed' : 'Safety Map'}
+            </Text>
           </TouchableOpacity>
-          {TAGS.map((t) => (
-            <TouchableOpacity
-              key={t}
-              style={[styles.filterChip, filter === t && { backgroundColor: TAG_COLORS[t] + '22', borderColor: TAG_COLORS[t] }]}
-              onPress={() => setFilter(filter === t ? null : t)}
-            >
-              <Text style={[styles.filterText, filter === t && { color: TAG_COLORS[t] }]}>{t}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        ))}
+      </View>
 
-        {/* Posts */}
-        <View style={styles.posts}>
-          {filtered.length === 0 ? (
-            <View style={styles.empty}>
-              <Ionicons name="chatbubbles-outline" size={56} color={colors.textMuted} />
-              <Text style={styles.emptyTitle}>No posts yet</Text>
-              <Text style={styles.emptySub}>
-                Be the first to share a safety tip,{'\n'}report an incident, or find a travel companion.
+      {/* Feed Tab */}
+      {activeTab === 'feed' && (
+        loading ? (
+          <ActivityIndicator style={{ flex: 1 }} color={colors.primary} />
+        ) : (
+          <FlatList
+            data={posts}
+            keyExtractor={p => p.id}
+            renderItem={renderPost}
+            contentContainerStyle={[styles.feedContent, posts.length === 0 && styles.feedEmpty]}
+            showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={{ fontSize: 48 }}>🌸</Text>
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Be the First to Post!</Text>
+                <Text style={[styles.emptySub, { color: colors.textMuted }]}>
+                  Share safety tips, incident alerts, or words of support.{'\n'}Your post gets GPS-tagged automatically.
+                </Text>
+              </View>
+            }
+          />
+        )
+      )}
+
+      {/* Safety Map Tab */}
+      {activeTab === 'map' && (
+        <View style={{ flex: 1 }}>
+          {mapPosts.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={{ fontSize: 48 }}>🗺️</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No mapped posts yet</Text>
+              <Text style={[styles.emptySub, { color: colors.textMuted }]}>
+                Posts with GPS coordinates will appear as pins on this map.
               </Text>
-              <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCompose(true)}>
-                <Text style={styles.emptyBtnText}>Create First Post</Text>
-              </TouchableOpacity>
             </View>
           ) : (
-            filtered.map((post) => (
-              <View key={post.id} style={styles.postCard}>
-                <View style={styles.postHeader}>
-                  <View style={styles.postAvatar}>
-                    <Text style={styles.postAvatarText}>{post.author.charAt(0)}</Text>
+            <>
+              <LeafletMapView
+                style={{ flex: 1 }}
+                center={mapCenter}
+                zoom={12}
+                userLat={myLocation?.lat}
+                userLng={myLocation?.lng}
+                markers={mapPosts.map(p => ({
+                  lat: p.lat!,
+                  lng: p.lng!,
+                  color: TAG_CONFIG[p.tag].color,
+                  popup: `${TAG_CONFIG[p.tag].icon} ${p.tag}: ${p.content.substring(0, 80)}${p.content.length > 80 ? '…' : ''}`,
+                }))}
+              />
+              <View style={[styles.mapLegend, { backgroundColor: colors.bgCard + 'EE', borderColor: colors.border }]}>
+                {(Object.entries(TAG_CONFIG) as [PostTag, { color: string; icon: string }][]).map(([tag, cfg]) => (
+                  <View key={tag} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: cfg.color }]} />
+                    <Text style={[styles.legendText, { color: colors.textMuted }]}>{tag}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.postAuthor}>{post.author}</Text>
-                    <Text style={styles.postTime}>{timeAgo(post.timestamp)}</Text>
-                  </View>
-                  <View style={[styles.postTag, { backgroundColor: TAG_COLORS[post.tag] + '22', borderColor: TAG_COLORS[post.tag] + '55' }]}>
-                    <Text style={[styles.postTagText, { color: TAG_COLORS[post.tag] }]}>{post.tag}</Text>
-                  </View>
-                </View>
-                <Text style={styles.postContent}>{post.content}</Text>
-                <View style={styles.postActions}>
-                  <TouchableOpacity style={styles.likeRow} onPress={() => likePost(post.id)}>
-                    <Ionicons name="heart-outline" size={16} color={colors.primary} />
-                    <Text style={styles.likeCount}>{post.likes}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => deletePost(post.id)}>
-                    <Ionicons name="trash-outline" size={14} color={colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
+                ))}
               </View>
-            ))
+            </>
           )}
         </View>
-      </ScrollView>
+      )}
+
+      {/* Compose Modal */}
+      <Modal visible={showCompose} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalSheet, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>New Post</Text>
+                <TouchableOpacity onPress={() => setShowCompose(false)}>
+                  <Ionicons name="close" size={24} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Tag selector */}
+              <View style={styles.tagsRow}>
+                {(Object.keys(TAG_CONFIG) as PostTag[]).map(tag => (
+                  <TouchableOpacity
+                    key={tag}
+                    style={[
+                      styles.tagChip,
+                      { backgroundColor: colors.bgElevated, borderColor: colors.border },
+                      selectedTag === tag && { backgroundColor: `${TAG_CONFIG[tag].color}20`, borderColor: TAG_CONFIG[tag].color },
+                    ]}
+                    onPress={() => setSelectedTag(tag)}
+                  >
+                    <Text style={styles.tagChipEmoji}>{TAG_CONFIG[tag].icon}</Text>
+                    <Text style={[styles.tagChipText, { color: selectedTag === tag ? TAG_CONFIG[tag].color : colors.textMuted }]}>
+                      {tag}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TextInput
+                style={[styles.composeInput, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]}
+                value={content}
+                onChangeText={setContent}
+                placeholder={
+                  selectedTag === 'Incident Alert' ? "Describe the incident — location, type, what happened..."
+                  : selectedTag === 'Safe Zone' ? "Why is this area safe? Any facilities, lighting, etc..."
+                  : selectedTag === 'Safety Tip' ? "Share a tip to help others stay safe..."
+                  : "Share a message of support with the community..."
+                }
+                placeholderTextColor={colors.textMuted}
+                multiline
+                numberOfLines={5}
+                autoFocus
+              />
+
+              <View style={[styles.locationNote, { backgroundColor: colors.primaryGlow }]}>
+                <Ionicons name="location" size={13} color={colors.primary} />
+                <Text style={[styles.locationNoteText, { color: colors.primary }]}>
+                  Your approximate location will be attached to this post
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: TAG_CONFIG[selectedTag].color, opacity: submitting ? 0.7 : 1 }]}
+                onPress={submitPost}
+                disabled={submitting}
+              >
+                {submitting
+                  ? <ActivityIndicator color="#fff" />
+                  : <><Ionicons name="send" size={16} color="#fff" /><Text style={styles.submitBtnText}>Share with Community</Text></>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md,
-  },
-  title: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '800' },
-  subtitle: { color: colors.textMuted, fontSize: fontSize.sm },
-  composeBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.full,
-    width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
-  },
-  compose: {
-    marginHorizontal: spacing.lg, backgroundColor: colors.bgCard,
-    borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
-    padding: spacing.md, gap: spacing.sm, marginBottom: spacing.md,
-  },
-  input: {
-    backgroundColor: colors.bgElevated, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
-    color: colors.textPrimary, fontSize: fontSize.md,
-    padding: spacing.sm + 4,
-  },
-  inputMulti: { minHeight: 90, textAlignVertical: 'top' },
-  tagsScroll: { marginVertical: spacing.xs },
-  tag: {
-    marginRight: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 5,
-    borderRadius: radius.full, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: 'transparent',
-  },
-  tagText: { fontSize: fontSize.xs, fontWeight: '600' },
-  postBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.md,
-    padding: spacing.md, alignItems: 'center',
-  },
-  postBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.md },
-  filterScroll: { marginBottom: spacing.sm },
-  filterContent: { paddingHorizontal: spacing.lg, gap: spacing.xs },
-  filterChip: {
-    paddingHorizontal: spacing.md, paddingVertical: 6,
-    borderRadius: radius.full, backgroundColor: colors.bgCard,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  filterChipActive: { backgroundColor: colors.primaryGlow, borderColor: colors.primary },
-  filterText: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '600' },
-  filterTextActive: { color: colors.primary },
-  posts: { padding: spacing.lg, paddingTop: 0, gap: spacing.md, paddingBottom: 60 },
-  empty: { alignItems: 'center', paddingVertical: 60, gap: spacing.md },
-  emptyTitle: { color: colors.textPrimary, fontSize: fontSize.xxl, fontWeight: '800' },
-  emptySub: { color: colors.textMuted, fontSize: fontSize.md, textAlign: 'center', lineHeight: 22 },
-  emptyBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
-  emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.md },
-  postCard: {
-    backgroundColor: colors.bgCard, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm,
-  },
-  postHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  postAvatar: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-  },
+  safe: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1 },
+  headerTitle: { fontSize: fontSize.xxl, fontWeight: '900' },
+  composeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.full },
+  composeBtnText: { color: '#fff', fontWeight: '700', fontSize: fontSize.sm },
+  subTabs: { flexDirection: 'row', borderBottomWidth: 1 },
+  subTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: spacing.sm, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  subTabActive: {},
+  subTabText: { fontSize: fontSize.sm, fontWeight: '700' },
+  feedContent: { padding: spacing.md, paddingBottom: 80 },
+  feedEmpty: { flex: 1 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
+  emptyTitle: { fontSize: fontSize.xl, fontWeight: '800', textAlign: 'center' },
+  emptySub: { fontSize: fontSize.sm, textAlign: 'center', lineHeight: 22 },
+  postCard: { borderRadius: radius.lg, borderWidth: 1, padding: spacing.md, gap: spacing.sm },
+  postHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  postAvatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   postAvatarText: { color: '#fff', fontWeight: '800', fontSize: fontSize.md },
-  postAuthor: { color: colors.textPrimary, fontSize: fontSize.sm, fontWeight: '700' },
-  postTime: { color: colors.textMuted, fontSize: fontSize.xs },
-  postTag: {
-    paddingHorizontal: spacing.xs + 2, paddingVertical: 3,
-    borderRadius: radius.full, borderWidth: 1,
-  },
-  postTagText: { fontSize: 10, fontWeight: '700' },
-  postContent: { color: colors.textSecondary, fontSize: fontSize.md, lineHeight: 22 },
-  postActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  likeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  likeCount: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '600' },
+  postMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, flexWrap: 'wrap' },
+  postAuthor: { fontSize: fontSize.sm, fontWeight: '700' },
+  postTime: { fontSize: fontSize.xs },
+  postMetaDot: { fontSize: fontSize.xs },
+  postLocation: { fontSize: fontSize.xs },
+  postTag: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.full },
+  postTagEmoji: { fontSize: 10 },
+  postTagText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  postContent: { fontSize: fontSize.sm, lineHeight: 20 },
+  postFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.xs, borderTopWidth: 1 },
+  likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  likeCount: { fontSize: fontSize.xs, fontWeight: '600' },
+  gpsTag: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto' },
+  gpsTagText: { fontSize: 9, fontWeight: '700' },
+  mapLegend: { position: 'absolute', bottom: 16, left: 12, right: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 9, fontWeight: '600' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' },
+  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: spacing.lg, maxHeight: '90%' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  modalTitle: { fontSize: fontSize.xl, fontWeight: '800' },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
+  tagChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1 },
+  tagChipEmoji: { fontSize: 13 },
+  tagChipText: { fontSize: fontSize.xs, fontWeight: '700' },
+  composeInput: { borderRadius: radius.md, borderWidth: 1, padding: spacing.md, fontSize: fontSize.sm, minHeight: 110, textAlignVertical: 'top', marginBottom: spacing.sm },
+  locationNote: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: spacing.sm, borderRadius: radius.sm, marginBottom: spacing.sm },
+  locationNoteText: { fontSize: fontSize.xs, fontWeight: '600' },
+  submitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.lg, padding: spacing.md },
+  submitBtnText: { color: '#fff', fontSize: fontSize.md, fontWeight: '800' },
 });
