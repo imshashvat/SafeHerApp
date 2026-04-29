@@ -1,0 +1,49 @@
+name: 🏗️ EAS Build — New APK
+
+# Trigger manually from GitHub Actions tab
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build'
+        required: true
+        default: 'android'
+        type: choice
+        options:
+          - android
+          - ios
+          - all
+
+jobs:
+  build:
+    name: Build APK / IPA
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: 📦 Install dependencies
+        run: npm ci
+        working-directory: mobile
+
+      - name: 🔧 Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 🏗️ Build app
+        run: |
+          eas build \
+            --platform ${{ github.event.inputs.platform }} \
+            --profile preview \
+            --non-interactive
+        working-directory: mobile
