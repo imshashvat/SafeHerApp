@@ -1,3 +1,4 @@
+// SafeHer v1.1.0 — OTA updates enabled
 import React, { useEffect } from 'react';
 import {
   View,
