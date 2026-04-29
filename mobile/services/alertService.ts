@@ -2,131 +2,164 @@
  * alertService.ts — dispatches SOS alerts silently.
  *
  * Delivery pipeline (all happen without opening any external app):
- *  1. Backend SMS  → POST /api/sos/sms  (Fast2SMS silent delivery)
- *  2. Backend email → POST /api/sos/email (SMTP silent delivery)
- *  3. Direct call  → tel: URL scheme (most reliable across Expo builds)
- *
- * SOS Live Location: If location is null at dispatch time, does an emergency
- * 5-second GPS fetch before sending alerts.
+ *  1. SMS  → Fast2SMS API (India, direct — no backend server needed)
+ *  2. Email → EmailJS SDK  (client-side — no backend server needed)
+ *  3. Call  → tel: URL with CALL_PHONE permission (auto-dials on Android)
  */
 
 import { Platform, Linking } from 'react-native';
 import * as Location from 'expo-location';
-import { useGuardianStore } from '../store/guardianStore';
-import { useSOSStore } from '../store/sosStore';
-import { useSettingsStore } from '../store/settingsStore';
-import { useAlertHistoryStore } from '../store/alertHistoryStore';
-import { SOS_NUMBER } from '../constants/helplines';
-
-// Try to import react-native-send-intent (Android only)
-let SendIntentAndroid: any = null;
-try {
-  SendIntentAndroid = require('react-native-send-intent').default;
-} catch {
-  // Not available in Expo Go — will fall back to Linking
-}
+import { useGuardianStore }    from '../store/guardianStore';
+import { useSOSStore }         from '../store/sosStore';
+import { useSettingsStore }    from '../store/settingsStore';
+import { useAlertHistoryStore }from '../store/alertHistoryStore';
+import { useAuthStore }        from '../store/authStore';
+import { SOS_NUMBER }          from '../constants/helplines';
 
 type TriggerType = 'SOS Button' | 'Shake Detected' | 'Fall Detected' | 'Voice Keyword';
 
 const TRIGGER_MAP: Record<string, TriggerType> = {
   button: 'SOS Button',
-  shake: 'Shake Detected',
-  fall: 'Fall Detected',
-  voice: 'Voice Keyword',
+  shake:  'Shake Detected',
+  fall:   'Fall Detected',
+  voice:  'Voice Keyword',
 };
 
-// Backend base URL — update to your machine's WiFi IP
-const BACKEND_URL = 'http://192.168.1.54:5000/api';
+// ─── API Keys (set these in mobile/.env) ─────────────────────────────────────
+// Fast2SMS:  https://www.fast2sms.com → API key from dashboard
+// EmailJS:   https://www.emailjs.com  → service_id / template_id / public_key
 
-// Timeout helper
-const fetchWithTimeout = (url: string, options: RequestInit, ms = 8000): Promise<Response> => {
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('timeout')), ms)
-  );
-  return Promise.race([fetch(url, options), timeout]);
-};
+const FAST2SMS_KEY      = process.env.EXPO_PUBLIC_FAST2SMS_KEY      ?? '';
+const EMAILJS_SERVICE   = process.env.EXPO_PUBLIC_EMAILJS_SERVICE_ID ?? '';
+const EMAILJS_TEMPLATE  = process.env.EXPO_PUBLIC_EMAILJS_TEMPLATE_ID ?? '';
+const EMAILJS_PUBLIC    = process.env.EXPO_PUBLIC_EMAILJS_PUBLIC_KEY  ?? '';
 
-function buildMessage(
-  lat: number,
-  lng: number,
-  profileName: string,
-  triggerLabel: string
-): string {
-  const osmLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}&zoom=15`;
-  const gMapsLink = `https://maps.google.com/?q=${lat},${lng}`;
-  const time = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const fetchWithTimeout = (url: string, options: RequestInit, ms = 10000): Promise<Response> =>
+  Promise.race([
+    fetch(url, options),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timed out')), ms)
+    ),
+  ]);
+
+function buildSMSMessage(lat: number, lng: number, name: string, trigger: string): string {
+  const mapsLink = `https://maps.google.com/?q=${lat},${lng}`;
+  return `🆘 EMERGENCY! ${name || 'Someone'} needs help! Triggered: ${trigger}. Location: ${mapsLink}. GPS: ${lat.toFixed(5)},${lng.toFixed(5)}. Please call 112 or reach them immediately!`;
+}
+
+function buildEmailBody(lat: number, lng: number, name: string, trigger: string): string {
+  const osmLink   = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}&zoom=15`;
+  const mapsLink  = `https://maps.google.com/?q=${lat},${lng}`;
+  const time      = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
   return (
     `🆘 EMERGENCY ALERT from SafeHer!\n\n` +
-    `${profileName || 'Someone'} needs help immediately!\n\n` +
-    `📍 Live Location:\n` +
-    `  OSM: ${osmLink}\n` +
-    `  Maps: ${gMapsLink}\n\n` +
+    `${name || 'Someone'} needs help immediately!\n\n` +
+    `📍 Live Location:\n  Google Maps: ${mapsLink}\n  OSM: ${osmLink}\n\n` +
     `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n` +
-    `Time: ${time}\n` +
-    `Triggered: ${triggerLabel}\n\n` +
+    `Time: ${time}\nTriggered: ${trigger}\n\n` +
     `⚠️ Please call them or dial 112 immediately!`
   );
 }
 
-// ─── Silent SMS via backend ───────────────────────────────────────────────────
+// ─── SMS via Fast2SMS (India) — silent, no SMS app opened ────────────────────
 
-async function sendSMSViaBackend(phones: string[], message: string): Promise<boolean> {
+async function sendSMSSilent(phones: string[], message: string): Promise<boolean> {
+  if (!FAST2SMS_KEY) {
+    console.warn('Fast2SMS key not set — SMS not sent');
+    return false;
+  }
   try {
+    const numbers = phones.join(',');
     const res = await fetchWithTimeout(
-      `${BACKEND_URL}/sos/sms`,
+      'https://www.fast2sms.com/dev/bulkV2',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phones, message }),
+        headers: {
+          authorization: FAST2SMS_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          route:    'q',
+          message,
+          numbers,
+          flash:    0,
+        }),
       },
-      8000
+      10000
     );
-    return res.ok;
-  } catch {
+    const json = await res.json() as Record<string, unknown>;
+    return json?.['return'] === true;
+  } catch (err) {
+    console.error('SMS send failed:', err);
     return false;
   }
 }
 
-// ─── Direct call — most reliable method ──────────────────────────────────────
+// ─── Email via EmailJS — silent, no email app opened ─────────────────────────
 
-export async function makeDirectCall(number: string): Promise<void> {
-  const cleanNumber = number.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
-  const telUrl = `tel:${cleanNumber}`;
-
-  // Try SendIntentAndroid first (auto-dials without pressing Call button)
-  if (Platform.OS === 'android' && SendIntentAndroid) {
+async function sendEmailSilent(
+  emails: string[],
+  senderName: string,
+  bodyText: string,
+  mapsUrl: string
+): Promise<boolean> {
+  if (!EMAILJS_SERVICE || !EMAILJS_TEMPLATE || !EMAILJS_PUBLIC) {
+    console.warn('EmailJS keys not set — email not sent');
+    return false;
+  }
+  let allOk = true;
+  for (const email of emails) {
     try {
-      SendIntentAndroid.makeCall(cleanNumber);
-      return;
+      const res = await fetchWithTimeout(
+        'https://api.emailjs.com/api/v1.0/email/send',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_id:  EMAILJS_SERVICE,
+            template_id: EMAILJS_TEMPLATE,
+            user_id:     EMAILJS_PUBLIC,
+            template_params: {
+              to_email:    email,
+              sender_name: senderName,
+              message:     bodyText,
+              maps_url:    mapsUrl,
+            },
+          }),
+        },
+        10000
+      );
+      if (!res.ok) allOk = false;
     } catch {
-      // Fall through to Linking
+      allOk = false;
     }
   }
-
-  // Universal fallback: tel: URL — works on all platforms, opens phone dialer
-  try {
-    const canOpen = await Linking.canOpenURL(telUrl);
-    if (canOpen) {
-      await Linking.openURL(telUrl);
-    }
-  } catch {
-    // Silently ignore
-  }
+  return allOk;
 }
 
-// ─── Emergency GPS fetch (fallback when location not yet available) ───────────
+// ─── Direct call — Android with CALL_PHONE permission auto-dials ──────────────
+
+export async function makeDirectCall(number: string): Promise<void> {
+  const clean  = number.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+  const telUrl = `tel:${clean}`;
+  try {
+    const canOpen = await Linking.canOpenURL(telUrl);
+    if (canOpen) await Linking.openURL(telUrl);
+  } catch { /* ignore */ }
+}
+
+// ─── Emergency GPS fetch ──────────────────────────────────────────────────────
 
 async function fetchEmergencyLocation(): Promise<{ latitude: number; longitude: number } | null> {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return null;
-
     const loc = await Promise.race([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+      new Promise<null>((r) => setTimeout(() => r(null), 5000)),
     ]);
-
     if (!loc) return null;
     return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
   } catch {
@@ -134,122 +167,79 @@ async function fetchEmergencyLocation(): Promise<{ latitude: number; longitude: 
   }
 }
 
-// ─── Main dispatch ────────────────────────────────────────────────────────────
+// ─── Main SOS dispatch ────────────────────────────────────────────────────────
 
 export async function dispatchSOS() {
-  const { guardians } = useGuardianStore.getState();
-  let { location } = useSOSStore.getState();
-  const { trigger } = useSOSStore.getState();
-  const { smsAlerts, emailAlerts, autoCallOnSOS, autoCallGuardian, profileName } =
-    useSettingsStore.getState();
+  const { guardians }  = useGuardianStore.getState();
+  let   { location }   = useSOSStore.getState();
+  const { trigger }    = useSOSStore.getState();
+  const { smsAlerts, emailAlerts, autoCallOnSOS, autoCallGuardian } = useSettingsStore.getState();
+  const { currentUser } = useAuthStore.getState();
+  const senderName = currentUser?.name || 'SafeHer User';
 
-  // ── Emergency GPS fallback if location not yet available ──────────────────
+  // Emergency GPS fallback
   if (!location || (location.latitude === 0 && location.longitude === 0)) {
-    const emergencyLoc = await fetchEmergencyLocation();
-    if (emergencyLoc) {
-      useSOSStore.getState().setLocation(emergencyLoc);
-      location = emergencyLoc;
-    }
+    const loc = await fetchEmergencyLocation();
+    if (loc) { useSOSStore.getState().setLocation(loc); location = loc; }
   }
 
-  const lat = location?.latitude ?? 0;
-  const lng = location?.longitude ?? 0;
-  const osmLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}&zoom=15`;
-  const gMapsLink = `https://maps.google.com/?q=${lat},${lng}`;
+  const lat          = location?.latitude  ?? 0;
+  const lng          = location?.longitude ?? 0;
   const triggerLabel = TRIGGER_MAP[trigger ?? 'button'] ?? 'SOS Button';
-  const message = buildMessage(lat, lng, profileName || 'SafeHer User', triggerLabel);
+  const mapsLink     = `https://maps.google.com/?q=${lat},${lng}`;
+  const smsMsg       = buildSMSMessage(lat, lng, senderName, triggerLabel);
+  const emailBody    = buildEmailBody(lat, lng, senderName, triggerLabel);
 
   const phones = guardians.map((g) => g.phone).filter(Boolean);
   const emails = guardians.map((g) => g.email).filter(Boolean);
-  const dispatchErrors: string[] = [];
+  const errors: string[] = [];
 
-  // ── 1. Silent SMS via backend ─────────────────────────────────────────────
+  // 1. Silent SMS via Fast2SMS
   if (smsAlerts && phones.length > 0) {
-    const backendOk = await sendSMSViaBackend(phones, message);
-    if (!backendOk) {
-      dispatchErrors.push('sms-backend-offline');
-    }
+    const ok = await sendSMSSilent(phones, smsMsg);
+    if (!ok) errors.push('sms');
   }
 
-  // ── 2. Silent email via backend ───────────────────────────────────────────
+  // 2. Silent email via EmailJS
   if (emailAlerts && emails.length > 0) {
-    try {
-      await fetchWithTimeout(
-        `${BACKEND_URL}/sos/email`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            emails,
-            location_url: gMapsLink,
-            osm_url: osmLink,
-            time: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-            sender_name: profileName || 'SafeHer User',
-          }),
-        },
-        8000
-      );
-    } catch {
-      dispatchErrors.push('email');
-    }
+    const ok = await sendEmailSilent(emails, senderName, emailBody, mapsLink);
+    if (!ok) errors.push('email');
   }
 
-  // ── 3. Auto-call emergency number (112) ───────────────────────────────────
+  // 3. Auto-call 112
   let callMade = false;
   if (autoCallOnSOS) {
-    try {
-      await makeDirectCall(SOS_NUMBER);
-      callMade = true;
-    } catch {
-      dispatchErrors.push('call-112');
-    }
+    await makeDirectCall(SOS_NUMBER);
+    callMade = true;
   }
 
-  // ── 4. Auto-call first priority guardian ─────────────────────────────────
+  // 4. Auto-call first guardian
   if (autoCallGuardian && guardians.length > 0) {
     const sorted = [...guardians].sort((a, b) => a.priority - b.priority);
-    try {
-      // Small delay so 112 call has time to connect before guardian call
-      if (autoCallOnSOS) {
-        await new Promise(r => setTimeout(r, 3000));
-      }
-      await makeDirectCall(sorted[0].phone);
-      callMade = true;
-    } catch {
-      dispatchErrors.push('call-guardian');
-    }
+    if (autoCallOnSOS) await new Promise((r) => setTimeout(r, 3000));
+    await makeDirectCall(sorted[0].phone);
+    callMade = true;
   }
 
-  // ── 5. Log to alert history ───────────────────────────────────────────────
+  // 5. Log alert
   useAlertHistoryStore.getState().addAlert({
-    trigger: triggerLabel,
-    timestamp: Date.now(),
-    latitude: lat || null,
-    longitude: lng || null,
-    location: lat ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'Unknown',
-    status: 'sent',
-    sentTo: phones.length + emails.length,
+    trigger:       triggerLabel,
+    timestamp:     Date.now(),
+    latitude:      lat || null,
+    longitude:     lng || null,
+    location:      lat ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'Unknown',
+    status:        'sent',
+    sentTo:        phones.length + emails.length,
     guardianNames: guardians.map((g) => g.name),
   });
 
   useSOSStore.getState().confirmSOS();
 
-  const noGuardians = guardians.length === 0;
-
-  return {
-    success: true,
-    noGuardians,
-    smsTo: phones,
-    emailedTo: emails,
-    callMade,
-    errors: dispatchErrors,
-  };
+  return { success: true, noGuardians: guardians.length === 0, smsTo: phones, emailedTo: emails, callMade, errors };
 }
 
-/** Convenience wrapper for quick in-app calls (helpline buttons etc.) */
 export async function quickCall(number: string): Promise<void> {
   await makeDirectCall(number);
 }
 
-/** Legacy alias */
 export const autoCall = makeDirectCall;
