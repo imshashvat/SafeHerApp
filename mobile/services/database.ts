@@ -68,7 +68,7 @@ export async function initDatabase(): Promise<void> {
       auto_call_guardian INTEGER DEFAULT 1,
       check_in_interval INTEGER DEFAULT 30,
       map_theme TEXT DEFAULT 'light',
-      app_theme TEXT DEFAULT 'dark',
+      app_theme TEXT DEFAULT 'light',
       language TEXT DEFAULT 'en',
       is_onboarded INTEGER DEFAULT 0,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -77,9 +77,16 @@ export async function initDatabase(): Promise<void> {
 
   // Migration: add app_theme column for existing databases
   try {
-    await db.runAsync(`ALTER TABLE user_settings ADD COLUMN app_theme TEXT DEFAULT 'dark'`);
+    await db.runAsync(`ALTER TABLE user_settings ADD COLUMN app_theme TEXT DEFAULT 'light'`);
   } catch {
     // Column already exists — ignore
+  }
+
+  // Migration: switch ALL users to light theme
+  try {
+    await db.runAsync(`UPDATE user_settings SET app_theme = 'light'`);
+  } catch {
+    // ignore
   }
 }
 

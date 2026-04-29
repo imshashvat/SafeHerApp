@@ -21,10 +21,9 @@ export default function ProfileScreen() {
   const { currentUser, logout, updateProfile } = useAuthStore();
 
   const [editing, setEditing] = useState(false);
-  // Pull name from authStore (the real DB name), not settingsStore
   const [name, setName] = useState(currentUser?.name ?? '');
-  const [blood, setBlood] = useState(bloodGroup);
-  const [notes, setNotes] = useState(medicalNotes);
+  const [blood, setBlood] = useState(currentUser?.blood_group ?? bloodGroup);
+  const [notes, setNotes] = useState(currentUser?.medical_notes ?? medicalNotes);
   const [saving, setSaving] = useState(false);
 
   const displayName = currentUser?.name || 'Your Name';
@@ -36,9 +35,13 @@ export default function ProfileScreen() {
     }
     setSaving(true);
     try {
-      // Update name in the database via authStore
-      await updateProfile({ name: name.trim() });
-      // Update blood/notes in settingsStore
+      // Save ALL profile fields to DB via authStore (single source of truth)
+      await updateProfile({
+        name: name.trim(),
+        blood_group: blood,
+        medical_notes: notes,
+      });
+      // Keep settingsStore in sync for immediate display
       update({ bloodGroup: blood, medicalNotes: notes });
       setEditing(false);
     } catch {
@@ -220,6 +223,16 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Settings */}
+        <TouchableOpacity
+          style={[styles.settingsBtn, { backgroundColor: colors.bgCard, borderColor: colors.border }]}
+          onPress={() => router.push('/settings')}
+        >
+          <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
+          <Text style={[styles.settingsBtnText, { color: colors.textSecondary }]}>Settings</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
         {/* Logout */}
         <TouchableOpacity
           style={[styles.logoutBtn, { backgroundColor: colors.bgCard, borderColor: colors.danger }]}
@@ -330,4 +343,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   logoutText: { fontSize: fontSize.md, fontWeight: '700' },
+  settingsBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: spacing.sm, borderRadius: radius.lg, borderWidth: 1,
+    padding: spacing.md,
+  },
+  settingsBtnText: { flex: 1, fontSize: fontSize.md, fontWeight: '600' },
 });

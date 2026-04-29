@@ -319,8 +319,8 @@ export default function RouteSafetyScreen() {
               value={from}
               onChangeText={setFrom}
             />
-            <TouchableOpacity onPress={handleGPSFill} style={styles.gpsBtn}>
-              <Text style={styles.gpsBtnText}>GPS</Text>
+            <TouchableOpacity onPress={handleGPSFill} style={styles.locateBtn}>
+              <Ionicons name="locate-outline" size={20} color={colors.primary} />
             </TouchableOpacity>
           </View>
           <View style={styles.inputRow}>
@@ -494,8 +494,11 @@ function makeStyles(colors: ThemeColors) {
     borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: 2,
   },
   input: { flex: 1, color: colors.textPrimary, fontSize: fontSize.md, paddingVertical: 10 },
-  gpsBtn: { backgroundColor: colors.accentGlow, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
-  gpsBtnText: { color: colors.accent, fontSize: fontSize.xs, fontWeight: '800' },
+  locateBtn: {
+    backgroundColor: colors.primaryGlow,
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+  },
   errorBox: {
     backgroundColor: 'rgba(255,59,59,0.1)', borderRadius: radius.md,
     borderWidth: 1, borderColor: 'rgba(255,59,59,0.3)', padding: spacing.sm,

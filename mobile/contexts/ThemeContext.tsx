@@ -25,8 +25,8 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  appTheme: 'dark',
-  colors: darkColors,
+  appTheme: 'light',
+  colors: lightColors,
   toggleAppTheme: () => {},
 });
 

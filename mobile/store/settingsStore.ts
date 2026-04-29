@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import {
   getUserSettings,
   saveUserSettings,
-  updateUserProfile,
   getUserById,
 } from '../services/database';
 
@@ -44,7 +43,7 @@ const DEFAULTS: Settings = {
   autoCallGuardian: true,
   checkInInterval: 30,
   mapTheme: 'light',
-  appTheme: 'dark',
+  appTheme: 'light',
   language: 'en',
   profileName: '',
   bloodGroup: '',
@@ -129,13 +128,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         language: s.language,
         is_onboarded: s.isOnboarded ? 1 : 0,
       });
-
-      // Also update profile fields on user record
-      await updateUserProfile(s.userId, {
-        name: s.profileName,
-        blood_group: s.bloodGroup,
-        medical_notes: s.medicalNotes,
-      });
+      // NOTE: profile fields (name, blood_group, medical_notes) are saved
+      // exclusively via authStore.updateProfile() — never here.
     } catch (err) {
       console.error('SettingsStore: Failed to save', err);
     }

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, Switch, Alert, TextInput, ActivityIndicator,
+  SafeAreaView, Switch, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -11,9 +11,9 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import { fontSize, spacing, radius } from '../constants/theme';
 
 const SENSITIVITY_LABELS = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
+
 
 function Section({ title, children, colors }: { title: string; children: React.ReactNode; colors: any }) {
   return (
@@ -70,40 +70,8 @@ export default function SettingsScreen() {
     mapTheme,
     update,
   } = useSettingsStore();
-  const { logout, currentUser, updateProfile } = useAuthStore();
+  const { logout, currentUser } = useAuthStore();
   const { appTheme, colors, toggleAppTheme } = useAppTheme();
-
-  // ── Profile edit state ────────────────────────────────────────────
-  const [editName, setEditName] = useState(currentUser?.name ?? '');
-  const [editEmail, setEditEmail] = useState(currentUser?.email ?? '');
-  const [editBloodGroup, setEditBloodGroup] = useState(currentUser?.blood_group ?? '');
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [profileSaved, setProfileSaved] = useState(false);
-
-  // Sync when currentUser is refreshed (after profile update)
-  useEffect(() => {
-    if (currentUser) {
-      setEditName(currentUser.name);
-      setEditEmail(currentUser.email ?? '');
-      setEditBloodGroup(currentUser.blood_group ?? '');
-    }
-  }, [currentUser?.id]);
-
-  const handleSaveProfile = async () => {
-    if (!editName.trim()) {
-      Alert.alert('Error', 'Name cannot be empty');
-      return;
-    }
-    setSavingProfile(true);
-    await updateProfile({
-      name: editName.trim(),
-      email: editEmail.trim(),
-      blood_group: editBloodGroup,
-    });
-    setSavingProfile(false);
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 2500);
-  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -233,108 +201,6 @@ export default function SettingsScreen() {
             </Text>
           </View>
         </View>
-
-        {/* ── 👤 Edit Profile ────────────────────────────────────────── */}
-        <Section title="👤 PROFILE" colors={colors}>
-          {/* Avatar row (read-only identity) */}
-          <View style={[styles.avatarRow, { borderBottomColor: colors.border }]}>
-            <View style={[styles.userAvatar, { backgroundColor: colors.primary }]}>
-              <Text style={styles.userAvatarText}>
-                {(editName || currentUser?.name || '?').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.userName, { color: colors.textPrimary }]}>
-                {editName || currentUser?.name}
-              </Text>
-              <Text style={[styles.userPhone, { color: colors.textMuted }]}>
-                {currentUser?.phone}
-              </Text>
-            </View>
-          </View>
-
-          {/* Name */}
-          <View style={[styles.editField, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.editLabel, { color: colors.textMuted }]}>FULL NAME</Text>
-            <View style={[styles.editInputWrap, { backgroundColor: colors.bgElevated, borderColor: colors.border }]}>
-              <Ionicons name="person-outline" size={16} color={colors.textMuted} />
-              <TextInput
-                style={[styles.editInput, { color: colors.textPrimary }]}
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="Your full name"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-          </View>
-
-          {/* Email */}
-          <View style={[styles.editField, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.editLabel, { color: colors.textMuted }]}>EMAIL</Text>
-            <View style={[styles.editInputWrap, { backgroundColor: colors.bgElevated, borderColor: colors.border }]}>
-              <Ionicons name="mail-outline" size={16} color={colors.textMuted} />
-              <TextInput
-                style={[styles.editInput, { color: colors.textPrimary }]}
-                value={editEmail}
-                onChangeText={setEditEmail}
-                placeholder="your@email.com"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-          </View>
-
-          {/* Blood Group chips */}
-          <View style={[styles.editField, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.editLabel, { color: colors.textMuted }]}>BLOOD GROUP</Text>
-            <View style={styles.bloodRow}>
-              {BLOOD_GROUPS.map((bg) => (
-                <TouchableOpacity
-                  key={bg}
-                  style={[
-                    styles.bloodChip,
-                    { backgroundColor: colors.bgElevated, borderColor: colors.border },
-                    editBloodGroup === bg && { backgroundColor: colors.primaryGlow, borderColor: colors.primary },
-                  ]}
-                  onPress={() => setEditBloodGroup(editBloodGroup === bg ? '' : bg)}
-                >
-                  <Text style={[
-                    styles.bloodText,
-                    { color: colors.textMuted },
-                    editBloodGroup === bg && { color: colors.primary },
-                  ]}>{bg}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Save button */}
-          <TouchableOpacity
-            style={[
-              styles.saveBtn,
-              { backgroundColor: profileSaved ? '#16a34a' : colors.primary },
-              savingProfile && { opacity: 0.7 },
-            ]}
-            onPress={handleSaveProfile}
-            disabled={savingProfile}
-          >
-            {savingProfile ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <>
-                <Ionicons
-                  name={profileSaved ? 'checkmark-circle' : 'save-outline'}
-                  size={18}
-                  color="#fff"
-                />
-                <Text style={styles.saveBtnText}>
-                  {profileSaved ? 'Saved!' : 'Save Profile'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </Section>
 
         {/* ── 🎨 App Theme ───────────────────────────────────────────── */}
         <Section title="🎨 APP THEME" colors={colors}>
