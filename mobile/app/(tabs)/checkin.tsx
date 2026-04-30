@@ -205,28 +205,36 @@ export default function CheckInScreen() {
 
                 {ci.active && (
                   <>
-                    {/* Live countdown */}
                     <View style={[styles.timerBox, overdue && styles.timerBoxOverdue]}>
-                      <Ionicons
-                        name={overdue ? "warning" : "timer-outline"}
-                        size={16}
-                        color={overdue ? colors.danger : colors.warning}
-                      />
+                      <Ionicons name={overdue ? 'warning' : 'timer-outline'} size={16} color={overdue ? colors.danger : colors.warning} />
                       <Text style={[styles.ciTimer, overdue && { color: colors.danger }]}>
                         {overdue ? 'OVERDUE — Are you safe?' : `Next check-in: ${timeText}`}
                       </Text>
                     </View>
-
                     <TouchableOpacity style={styles.safeBtn} onPress={() => markSafe(ci.id)}>
                       <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                      <Text style={styles.safeBtnText}>I'm Safe ✓</Text>
+                      <Text style={styles.safeBtnText}>✅ I'm Safe — Reset Timer</Text>
                     </TouchableOpacity>
                   </>
                 )}
 
-                <TouchableOpacity style={styles.removeBtn} onPress={() => remove(ci.id)}>
-                  <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                </TouchableOpacity>
+                {/* Action row: Turn Off | Delete */}
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: colors.bgElevated, borderColor: colors.border }]}
+                    onPress={() => toggleActive(ci.id)}
+                  >
+                    <Ionicons name={ci.active ? 'pause-circle-outline' : 'play-circle-outline'} size={15} color={colors.textMuted} />
+                    <Text style={[styles.actionBtnText, { color: colors.textMuted }]}>{ci.active ? 'Pause' : 'Resume'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: '#FF336612', borderColor: '#FF336640' }]}
+                    onPress={() => remove(ci.id)}
+                  >
+                    <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                    <Text style={[styles.actionBtnText, { color: colors.danger }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           })
@@ -299,7 +307,12 @@ function makeStyles(colors: ThemeColors) {
     borderRadius: radius.md, padding: spacing.sm,
   },
   safeBtnText: { color: '#fff', fontSize: fontSize.sm, fontWeight: '700' },
-  removeBtn: { position: 'absolute', top: spacing.md, right: spacing.md },
+  actionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  actionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, borderWidth: 1, borderRadius: radius.md, paddingVertical: spacing.sm,
+  },
+  actionBtnText: { fontSize: fontSize.xs, fontWeight: '600' },
   infoBox: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
     backgroundColor: colors.accentGlow, borderRadius: radius.md,

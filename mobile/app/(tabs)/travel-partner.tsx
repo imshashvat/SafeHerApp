@@ -261,7 +261,15 @@ export default function TravelPartnerScreen() {
                   <Text style={styles.partnerAvatarText}>{p.name.charAt(0)}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.partnerName, { color: colors.textPrimary }]}>{p.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text style={[styles.partnerName, { color: colors.textPrimary }]}>{p.name}</Text>
+                    {p.verificationStatus === 'verified' && (
+                      <Ionicons name="shield-checkmark" size={14} color={colors.success} />
+                    )}
+                    {p.verificationStatus === 'pending' && (
+                      <Ionicons name="time-outline" size={13} color="#FFB800" />
+                    )}
+                  </View>
                   <Text style={[styles.partnerTime, { color: colors.textMuted }]}>
                     {new Date(p.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                   </Text>

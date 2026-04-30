@@ -59,18 +59,19 @@ export default function DashboardScreen() {
         {/* KPI Cards */}
         <View style={styles.kpiRow}>
           {[
-            { label: 'Total Crimes', value: `${Math.round(totalCrimes / 100000)}L+`, color: colors.primary, icon: 'bar-chart' },
+            { label: 'Total Crimes', value: totalCrimes.toLocaleString('en-IN'), color: colors.primary, icon: 'bar-chart' },
             { label: 'Districts', value: crimeDataService.districtCount.toString(), color: colors.accent, icon: 'location' },
-            { label: 'States & UTs', value: crimeDataService.stateCount.toString(), color: colors.success, icon: 'globe' },
+            { label: 'States & UTs', value: `${crimeDataService.stateCount} (28+8)`, color: colors.success, icon: 'globe' },
             { label: 'Highest Risk', value: stateRankings[0]?.state?.substring(0, 8) || '—', color: '#FF3366', icon: 'warning' },
           ].map((k, i) => (
             <View key={i} style={[styles.kpiCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
               <Ionicons name={k.icon as any} size={16} color={k.color} />
-              <Text style={[styles.kpiValue, { color: k.color }]}>{k.value}</Text>
+              <Text style={[styles.kpiValue, { color: k.color }]} numberOfLines={1} adjustsFontSizeToFit>{k.value}</Text>
               <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>{k.label}</Text>
             </View>
           ))}
         </View>
+
         {/* ML Model */}
         <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <View style={styles.cardHeader}>
