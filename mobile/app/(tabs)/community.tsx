@@ -79,25 +79,13 @@ export default function CommunityScreen() {
   const load = async () => {
     try {
       const raw = await AsyncStorage.getItem(POSTS_KEY);
-      let loaded: CommunityPost[] = raw ? JSON.parse(raw) : [];
-
-      // Seed demo Indian city incidents on first launch so map shows dots
-      if (loaded.length === 0) {
-        const SEED: CommunityPost[] = [
-          { id: 'seed_1', author: 'SafeHer Community', content: 'Poorly lit lane near Connaught Place metro exit. Avoid after 9pm, use main road.', tag: 'Incident Alert', timestamp: Date.now() - 3600000, likes: 12, likedByMe: false, location: 'Connaught Place, Delhi', lat: 28.6315, lng: 77.2167 },
-          { id: 'seed_2', author: 'SafeHer Community', content: 'Bandra station area — safe zone with police patrolling till midnight.', tag: 'Safe Zone', timestamp: Date.now() - 7200000, likes: 28, likedByMe: false, location: 'Bandra, Mumbai', lat: 19.0596, lng: 72.8376 },
-          { id: 'seed_3', author: 'SafeHer Community', content: 'Tip: PhonePe Circle app shows verified cabs. Always cross-check before boarding.', tag: 'Safety Tip', timestamp: Date.now() - 14400000, likes: 45, likedByMe: false, location: 'Koramangala, Bangalore', lat: 12.9352, lng: 77.6245 },
-          { id: 'seed_4', author: 'SafeHer Community', content: 'Incident reported near Hitech City bus stop late evening. Travel in groups.', tag: 'Incident Alert', timestamp: Date.now() - 86400000, likes: 17, likedByMe: false, location: 'Hitech City, Hyderabad', lat: 17.4471, lng: 78.3780 },
-          { id: 'seed_5', author: 'SafeHer Community', content: 'Park Street area has women police officers deployed on weekends. Safe for dining.', tag: 'Safe Zone', timestamp: Date.now() - 172800000, likes: 31, likedByMe: false, location: 'Park Street, Kolkata', lat: 22.5525, lng: 88.3534 },
-          { id: 'seed_6', author: 'SafeHer Community', content: 'Auto-rickshaws in T.Nagar demanding extra fare after midnight. Use Ola/Uber.', tag: 'Safety Tip', timestamp: Date.now() - 259200000, likes: 22, likedByMe: false, location: 'T.Nagar, Chennai', lat: 13.0418, lng: 80.2341 },
-          { id: 'seed_7', author: 'SafeHer Community', content: 'Stray harassment reported near Sector 18 market. Avoid parking garage at night.', tag: 'Incident Alert', timestamp: Date.now() - 345600000, likes: 9, likedByMe: false, location: 'Sector 18, Noida', lat: 28.5675, lng: 77.3211 },
-          { id: 'seed_8', author: 'SafeHer Community', content: 'Support group for survivors meets every Sunday 5pm at WCD office, Aundh.', tag: 'Support', timestamp: Date.now() - 432000000, likes: 54, likedByMe: false, location: 'Aundh, Pune', lat: 18.5590, lng: 73.8080 },
-        ];
-        loaded = SEED;
-        await AsyncStorage.setItem(POSTS_KEY, JSON.stringify(SEED));
+      // Also clear any previously seeded dummy data (posts by 'SafeHer Community')
+      const all: CommunityPost[] = raw ? JSON.parse(raw) : [];
+      const real = all.filter(p => p.author !== 'SafeHer Community');
+      if (real.length !== all.length) {
+        await AsyncStorage.setItem(POSTS_KEY, JSON.stringify(real));
       }
-
-      setPosts(loaded);
+      setPosts(real);
     } finally {
       setLoading(false);
     }
