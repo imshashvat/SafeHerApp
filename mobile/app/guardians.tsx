@@ -86,7 +86,7 @@ function GuardianCard({ guardian, colors }: { guardian: Guardian; colors: any })
 
   if (editing) {
     return (
-      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.primary }]}>
+      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.primary, flexDirection: 'column', alignItems: 'stretch' }]}>
         <Text style={[styles.cardName, { color: colors.primary, marginBottom: 8 }]}>Edit Guardian</Text>
         <TextInput style={[styles.editInput, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]} value={eName}  onChangeText={setEName}  placeholder="Name *"  placeholderTextColor={colors.textMuted} />
         <TextInput style={[styles.editInput, { backgroundColor: colors.bgElevated, borderColor: colors.border, color: colors.textPrimary }]} value={ePhone} onChangeText={setEPhone} placeholder="Phone *" placeholderTextColor={colors.textMuted} keyboardType="phone-pad" />

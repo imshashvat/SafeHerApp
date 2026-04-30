@@ -46,9 +46,13 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      # 5. Push OTA update to the `preview` branch (matches the installed APK channel)
-      #    Users get this update silently on next app open — NO REINSTALL NEEDED
+      # 5. Push OTA update to the `preview` branch
       - name: 🚀 Publish OTA Update
+        env:
+          EXPO_PUBLIC_FAST2SMS_KEY: ${{ secrets.FAST2SMS_KEY }}
+          EXPO_PUBLIC_EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
+          EXPO_PUBLIC_EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
+          EXPO_PUBLIC_EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
         run: |
           eas update \
             --branch preview \

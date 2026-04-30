@@ -21,6 +21,7 @@ import {
   startForegroundService,
   configureSilentNotifications,
 } from '../services/backgroundService';
+import { registerBackgroundTasks } from '../services/backgroundTasks';
 
 // Configure notification display behavior immediately (module-level)
 configureSilentNotifications();
@@ -68,6 +69,9 @@ function InnerLayout() {
 
     // Start foreground service so Android keeps app alive when screen is off
     startForegroundService().catch(() => {});
+
+    // Register background tasks (check-in monitor, background location)
+    registerBackgroundTasks().catch(() => {});
   }, []);
 
   // Load user-specific data when user logs in + start location watch

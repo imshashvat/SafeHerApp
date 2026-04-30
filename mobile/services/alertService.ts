@@ -7,7 +7,7 @@
  *  3. Call  → react-native-send-intent makeCall (no dialer app on Android)
  */
 
-import { Platform, Linking } from 'react-native';
+import { Platform, Linking, PermissionsAndroid } from 'react-native';
 import * as Location from 'expo-location';
 import { useGuardianStore }     from '../store/guardianStore';
 import { useSOSStore }          from '../store/sosStore';
@@ -106,19 +106,34 @@ async function sendEmailSilent(emails: string[], name: string, body: string, map
 export async function makeDirectCall(number: string): Promise<void> {
   const clean = number.replace(/[\s\-().]/g, '').replace(/[^0-9+]/g, '');
 
-  if (Platform.OS === 'android' && SendIntentAndroid) {
+  if (Platform.OS === 'android') {
+    // Request CALL_PHONE permission at runtime — required even if declared in manifest
     try {
-      SendIntentAndroid.makeCall(clean);
-      return; // Direct call — Phone app does NOT open
-    } catch { /* fall through */ }
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CALL_PHONE,
+        {
+          title: 'Emergency Call Permission',
+          message: 'SafeHer needs this to auto-dial emergency contacts',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+        }
+      );
+      if (granted === PermissionsAndroid.RESULTS.GRANTED && SendIntentAndroid) {
+        SendIntentAndroid.makeCall(clean); // Direct call — no Phone app opened
+        return;
+      }
+    } catch (e) {
+      console.error('[SafeHer] Call error:', e);
+    }
   }
 
-  // iOS / fallback
+  // iOS fallback
   try {
     const url = `tel:${clean}`;
     if (await Linking.canOpenURL(url)) await Linking.openURL(url);
   } catch { /* ignore */ }
 }
+
 
 // ─── Emergency GPS ────────────────────────────────────────────────────────────
 

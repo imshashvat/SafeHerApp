@@ -90,19 +90,31 @@ export function useSOSDispatch() {
           errors: result.errors ?? [],
           noGuardians: result.noGuardians ?? false,
         });
+
+        // Show delivery status so user knows what worked
+        const lines: string[] = [];
+        if (result.smsTo?.length)    lines.push(`📱 SMS sent to ${result.smsTo.length} guardian(s)`);
+        else                          lines.push('📱 SMS: ❌ Not sent');
+        if (result.emailedTo?.length) lines.push(`📧 Email sent to ${result.emailedTo.length} guardian(s)`);
+        else                          lines.push('📧 Email: ❌ Not sent');
+        lines.push(result.callMade ? '📞 Call: ✅ Dialled' : '📞 Call: ❌ Not made');
+        if (result.noGuardians)       lines.push('\n⚠️ No guardians added — go to Guardians tab!');
+        if (result.errors?.length)    lines.push(`\nErrors: ${result.errors.join(', ')}`);
+
+        const { Alert } = require('react-native');
+        Alert.alert('🆘 SOS Dispatched', lines.join('\n'), [{ text: 'OK' }]);
+
         // Reset 8 seconds after alert is sent so user can send AGAIN
         clearResetTimer();
-        resetTimerRef.current = setTimeout(() => {
-          reset();
-        }, 8000);
-      }).catch(() => {
-        // Even on error, reset so user can try again
+        resetTimerRef.current = setTimeout(() => { reset(); }, 8000);
+      }).catch((err) => {
+        const { Alert } = require('react-native');
+        Alert.alert('SOS Error', String(err));
         clearResetTimer();
-        resetTimerRef.current = setTimeout(() => {
-          reset();
-        }, 5000);
+        resetTimerRef.current = setTimeout(() => { reset(); }, 5000);
       });
     }
+
   }, [status]);
 
   const handleCancelSOS = useCallback(() => {

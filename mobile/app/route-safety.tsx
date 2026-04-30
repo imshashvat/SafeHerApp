@@ -131,7 +131,17 @@ export default function RouteSafetyScreen() {
   const handleGPSFill = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission denied'); return; }
-    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+
+    // Step 1: Use cached location instantly (no GPS warm-up wait)
+    let loc = await Location.getLastKnownPositionAsync({ maxAge: 120_000, requiredAccuracy: 200 });
+
+    // Step 2: If no cache, get fresh with Low accuracy (much faster than Balanced)
+    if (!loc) {
+      loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+    }
+
+    if (!loc) { setFrom('Could not get location'); return; }
+
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.coords.latitude}&lon=${loc.coords.longitude}&addressdetails=1&zoom=16`,
@@ -145,6 +155,7 @@ export default function RouteSafetyScreen() {
       setFrom(`${loc.coords.latitude.toFixed(5)}, ${loc.coords.longitude.toFixed(5)}`);
     }
   };
+
 
   const analyze = async () => {
     if (!from || !to) return;
